@@ -1,0 +1,6 @@
+{
+    "code-runner.executorMap": {
+        "c": "cd $dir ; & \"C:\\w64devkit\\bin\\gcc.exe\" $fileName -o $fileNameWithoutExt.exe -I raylib\\include -L raylib\\lib -lraylib -lopengl32 -lgdi32 -lwinmm ; if ($?) { & \".\\$fileNameWithoutExt.exe\" }"
+    },
+    "code-runner.runInTerminal": true
+}
