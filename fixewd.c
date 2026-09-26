@@ -199,12 +199,18 @@ int main()
 
     char* start="START GAME";
     char* exit="EXIT GAME";
+    char* instruction="Instructions";
+    char* credits="Credits";
     
     Vector2 sizeStart=MeasureTextEx(myfont,start,40,2);
     Vector2 sizeExit=MeasureTextEx(myfont,exit,40,2);
+    Vector2 sizeinstructions=MeasureTextEx(myfont,instruction,40,2);
+    Vector2 sizecredits=MeasureTextEx(myfont,credits,40,2);
 
     Rectangle startbtn={screenWidth/2-sizeStart.x/2,250,sizeStart.x,sizeStart.y};
     Rectangle exitbtn={screenWidth/2-sizeExit.x/2,300,sizeExit.x,sizeExit.y};
+    Rectangle instrbtn={screenWidth/2-sizeinstructions.x/2,350,sizeinstructions.x,sizeinstructions.y};
+    Rectangle creditbtn={screenWidth/2-sizecredits.x/2,400,sizecredits.x,sizecredits.y};
 
     //level 1 shuru
     SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth);
@@ -621,6 +627,10 @@ int main()
             DrawTextEx(myfont,start,(Vector2){startbtn.x,startbtn.y},40,2,colstart);
             Color colexit=CheckCollisionPointRec(mousepos,exitbtn)?GREEN:RED;
             DrawTextEx(myfont,exit,(Vector2){exitbtn.x,exitbtn.y},40,2,colexit); 
+            Color colinstr=CheckCollisionPointRec(mousepos,instrbtn)?GREEN:RED;
+            DrawTextEx(myfont,instruction,(Vector2){instrbtn.x,instrbtn.y},40,2,colinstr);
+            Color colcred=CheckCollisionPointRec(mousepos,creditbtn)?GREEN:RED;
+            DrawTextEx(myfont,credits,(Vector2){creditbtn.x,creditbtn.y},40,2,colcred);
         }
         else if(currentState==STATE_GAMEPLAY)
         {
@@ -728,19 +738,6 @@ int main()
             {
                 DrawText("GAME OVER!!Press R to Restart",screenWidth/2-200,screenHeight/2,28,RED);
             }
-
-            //--- TEMP DEBUG: remove once goblins are confirmed visible ---
-            //id==0 means LoadTexture failed for that file (wrong path / file not copied / working directory issue)
-            DrawText(TextFormat("goblin idle : id=%d  %dx%d", goblinAnim.idle.id,   goblinAnim.idle.width,   goblinAnim.idle.height),   10, 460, 16, goblinAnim.idle.id  ?LIME:RED);
-            DrawText(TextFormat("goblin run  : id=%d  %dx%d", goblinAnim.run.id,    goblinAnim.run.width,    goblinAnim.run.height),    10, 478, 16, goblinAnim.run.id   ?LIME:RED);
-            DrawText(TextFormat("goblin hit  : id=%d  %dx%d", goblinAnim.hit.id,    goblinAnim.hit.width,    goblinAnim.hit.height),    10, 496, 16, goblinAnim.hit.id   ?LIME:RED);
-            DrawText(TextFormat("goblin atk  : id=%d  %dx%d", goblinAnim.attack.id, goblinAnim.attack.width, goblinAnim.attack.height), 10, 514, 16, goblinAnim.attack.id?LIME:RED);
-            DrawText(TextFormat("goblin death: id=%d  %dx%d", goblinAnim.death.id,  goblinAnim.death.width,  goblinAnim.death.height),  10, 532, 16, goblinAnim.death.id ?LIME:RED);
-            DrawText(TextFormat("active enemies: %d", activeEnemyCount), 10, 550, 16, LIME);
-            DrawText(TextFormat("player idle=%d run=%d jump=%d fall=%d dash=%d atk1=%d atk2=%d hurt=%d death=%d",
-                playerAnim.idle.id, playerAnim.run.id, playerAnim.jump.id, playerAnim.fall.id, playerAnim.dash.id,
-                playerAnim.attack1.id, playerAnim.attack2.id, playerAnim.hurt.id, playerAnim.death.id), 250, 550, 14, LIME);
-            //--- END TEMP DEBUG ---
         }
         else if(currentState==STATE_VICTORY)
         {
