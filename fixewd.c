@@ -19,6 +19,17 @@
 #define DASH_SPEED 700.0f
 #define DASH_DURATION 0.2f   //how long the dash's forward slide lasts
 #define DASH_COOLDOWN 0.5f   //time before you can dash again
+// attack fixing
+#define PLAYER_COLLISION_WIDTH 40.0f
+#define PLAYER_COLLISION_HEIGHT 80.0f
+#define PLAYER_OFFSET_X 173.0f
+#define PLAYER_OFFSET_Y 10.0f
+#define ENEMY_COLLISION_WIDTH 45.0f
+#define ENEMY_COLLISION_HEIGHT 75.0f
+#define ENEMY_OFFSET_X 15.0f
+#define ENEMY_COLLISION_OFFSET_Y 10.0f
+#define PLAYER_ATTACK_FORWARD_OFFSET -20.0f
+
 
 typedef enum GameState
 {
@@ -151,7 +162,6 @@ int main()
     goblinAnim.death=LoadTexture("assets/enemies/goblin/goblin_death_anim_strip_6.png");   goblinAnim.deathFrames=6;
 
     //--- player animations ---
-    //fix: copy these from D:\Hollow_Knight-try-this\gamerunfolder\assets\player\ into assets/player/ in the project folder
     PlayerAnimSet playerAnim={0};
     playerAnim.idle=LoadTexture("assets/player/Idle.png");         playerAnim.idleFrames=7;
     playerAnim.run=LoadTexture("assets/player/Run.png");           playerAnim.runFrames=8;
@@ -333,22 +343,36 @@ int main()
                 {
                     attackTimer-=deltaTime;
 
-                    float attackRange=150.0f;
-                    float playerCenterX=player.rec.x+(player.rec.width/2.0f);
-                    Rectangle attackBox=facingRight?(Rectangle){ playerCenterX, player.rec.y-20.0f, attackRange, player.rec.height+40.0f }
-                        :(Rectangle){ playerCenterX-attackRange, player.rec.y-20.0f, attackRange, player.rec.height+40.0f };
+                     float attackRange=70.0f;
+                    Rectangle playerCollisionRec = {
+                        player.rec.x + PLAYER_OFFSET_X,
+                        player.rec.y + PLAYER_OFFSET_Y,
+                        PLAYER_COLLISION_WIDTH,
+                        PLAYER_COLLISION_HEIGHT
+                    };
+                    Rectangle attackBox=facingRight?(Rectangle){ playerCollisionRec.x+playerCollisionRec.width+PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRec.y, attackRange, playerCollisionRec.height }
+                        :(Rectangle){ playerCollisionRec.x-attackRange-PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRec.y, attackRange, playerCollisionRec.height };
 
-                    for(int i=0;i<activeEnemyCount;i++)
+                        for(int i=0;i<activeEnemyCount;i++)
                     {
                         bool alreadyDying=(enemies[i].animState==ENEMY_ANIM_HIT||enemies[i].animState==ENEMY_ANIM_DEATH);
-                        if(enemies[i].active&&!alreadyDying&&CheckCollisionRecs(attackBox, enemies[i].rec))
+                        Rectangle enemyCollisionRec = {
+                            enemies[i].rec.x + ENEMY_OFFSET_X,
+                            enemies[i].rec.y + ENEMY_COLLISION_OFFSET_Y,
+                            ENEMY_COLLISION_WIDTH,
+                            ENEMY_COLLISION_HEIGHT
+                        };
+                        if(enemies[i].active&&!alreadyDying&&CheckCollisionRecs(attackBox, enemyCollisionRec))   
                         {
                             enemies[i].animState=ENEMY_ANIM_HIT;
                             enemies[i].currentFrame=0;
                             enemies[i].frameTimer=0.0f;
                         }
                     }
-                    if(attackTimer<=0.0f)isAttacking=false;
+                    if(attackTimer<=0.0f)
+                    {
+                        isAttacking=false;
+                    }    
                 }
 
                 //enemy auto
@@ -423,31 +447,37 @@ int main()
                         }
                     }
 
-                    if(!isInvincible&&!isDashing&&e->animState!=ENEMY_ANIM_ATTACK)
-                    {
-                        float pCenterX=player.rec.x+(player.rec.width/2.0f);
-                        float pCenterY=player.rec.y+(player.rec.height/2.0f);
-                        float eCenterX=e->rec.x+(e->rec.width/2.0f);
-                        float eCenterY=e->rec.y+(e->rec.height/2.0f);
-                        float deltaX=fabsf(pCenterX-eCenterX);
-                        float deltaY=fabsf(pCenterY-eCenterY);
-                        if(deltaX<50.0f&&deltaY<45.0f)
-                        {
-                            playerHealth--;
-                            isInvincible=true;
-                            invincibilityTimer=invincibilityDuration;
-                            isHurt=true;
-                            hurtTimer=hurtAnimDuration;
-                            playerFrame=0;
-                            playerFrameTimer=0.0f;
-                            if(pCenterX<eCenterX) player.rec.x-=40.0f;
-                            else player.rec.x+=40.0f;
-                            verticalVelocity=-200.0f;
-                            e->animState=ENEMY_ANIM_ATTACK;
-                            e->currentFrame=0;
-                            e->frameTimer=0.0f;
+                        if(!isInvincible&&!isDashing&&e->animState!=ENEMY_ANIM_ATTACK)
+                            {
+                            Rectangle playerCollisionRec = {
+                                player.rec.x + PLAYER_OFFSET_X,
+                                player.rec.y + PLAYER_OFFSET_Y,
+                                PLAYER_COLLISION_WIDTH,
+                                PLAYER_COLLISION_HEIGHT
+                            };
+                            Rectangle enemyCollisionRec = {
+                                e->rec.x + ENEMY_OFFSET_X,
+                                e->rec.y + ENEMY_COLLISION_OFFSET_Y,
+                                ENEMY_COLLISION_WIDTH,
+                                ENEMY_COLLISION_HEIGHT
+                            };
+                            if(CheckCollisionRecs(playerCollisionRec, enemyCollisionRec))
+                            {
+                                playerHealth--;
+                                isInvincible=true;
+                                invincibilityTimer=invincibilityDuration;
+                                isHurt=true;
+                                hurtTimer=hurtAnimDuration;
+                                playerFrame=0;
+                                playerFrameTimer=0.0f;
+                                if(player.rec.x<e->rec.x) player.rec.x-=40.0f;
+                                else player.rec.x+=40.0f;
+                                verticalVelocity=-200.0f;
+                                e->animState=ENEMY_ANIM_ATTACK;
+                                e->currentFrame=0;
+                                e->frameTimer=0.0f; 
+                            }
                         }
-                    }
                 }
 
                 //pick which player animation should be playing right now
@@ -557,7 +587,7 @@ int main()
             DrawText(opt1Text,(screenWidth-MeasureText(opt1Text,28))/2,270,28,opt1Color);
             Color opt2Color=(selectedOption==1)?YELLOW:GRAY;
             const char*opt2Text=(selectedOption==1)?"> Exit <":"Exit";
-            DrawText(opt2Text,(screenWidth-MeasureText(opt2Text,28))/2,320,28,opt2Color);
+           DrawText (opt2Text,(screenWidth-MeasureText(opt2Text,28))/2,320,28,opt2Color);
         }
         else if(currentState==STATE_GAMEPLAY)
         {
@@ -625,7 +655,27 @@ int main()
                     DrawTexturePro(tex,src,dest,(Vector2){0, 0},0.0f,WHITE);
                 }
             }
+            //
+            // --- TEMP DEBUG: hitbox outlines, remove once aligned ---
+                    Rectangle playerCollisionRecDraw = {
+                        player.rec.x + PLAYER_OFFSET_X,
+                        player.rec.y + PLAYER_OFFSET_Y,
+                        PLAYER_COLLISION_WIDTH,
+                        PLAYER_COLLISION_HEIGHT
+                    };
+                    for(int i=0;i<activeEnemyCount;i++)
+                    {
+                        if(!enemies[i].active) continue;
+                        Rectangle enemyCollisionRecDraw = {
+                            enemies[i].rec.x + ENEMY_OFFSET_X,
+                            enemies[i].rec.y + ENEMY_COLLISION_OFFSET_Y,
+                            ENEMY_COLLISION_WIDTH,
+                            ENEMY_COLLISION_HEIGHT
+                        };
+                    }
 
+            // --- END TEMP DEBUG ---
+            //
             DrawText(TextFormat("LEVEL %d/3",currentLevel),10,10,22,YELLOW);
             for(int i=0;i<maxPlayerHealth;i++)
             {
