@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <math.h>
+#include<stddef.h>
 
 #define ABSOLUTE_MAX_ENEMIES 12
 #define screenWidth 1280
@@ -29,6 +30,12 @@
 #define ENEMY_OFFSET_X 15.0f
 #define ENEMY_COLLISION_OFFSET_Y 10.0f
 #define PLAYER_ATTACK_FORWARD_OFFSET -20.0f
+#define ATTACK1_HIT_START_FRAME 3
+#define ATTACK1_HIT_END_FRAME 5
+#define ATTACK2_HIT_START_FRAME 4
+#define ATTACK2_HIT_END_FRAME 7
+#define ATTACK1_DURATION 0.4f
+#define ATTACK2_DURATION 0.6f
 
 
 typedef enum GameState
@@ -108,6 +115,7 @@ int main()
 {
     InitWindow(screenWidth, screenHeight, "HOLLOW KNIGHT");
     SetTargetFPS(60);
+    InitAudioDevice();
     GameState currentState=STATE_MENU;
     int selectedOption=0;
     float verticalVelocity=0.0f;
@@ -183,7 +191,20 @@ int main()
     Texture2D bgTextureLvl1=LoadTexture("assets/bg.png");
     Texture2D bgTextureLvl2=LoadTexture("assets/bg2.png");
     Texture2D bgTextureLvl3=LoadTexture("assets/bg3.png");
+    Texture2D menubg=LoadTexture("assets/menubg.png");
+    Font myfont=LoadFontEx("assets/themefont.TTF",100,NULL,0);
+    Sound clicksound=LoadSound("assets/audio/clicksound.mp3");
+    Music gamemusic=LoadMusicStream("assets/audio/Hollow Knight OST - Sealed Vessel.mp3");
     Texture2D currentBgTexture=bgTextureLvl1;
+
+    char* start="START GAME";
+    char* exit="EXIT GAME";
+    
+    Vector2 sizeStart=MeasureTextEx(myfont,start,40,2);
+    Vector2 sizeExit=MeasureTextEx(myfont,exit,40,2);
+
+    Rectangle startbtn={screenWidth/2-sizeStart.x/2,250,sizeStart.x,sizeStart.y};
+    Rectangle exitbtn={screenWidth/2-sizeExit.x/2,300,sizeExit.x,sizeExit.y};
 
     //level 1 shuru
     SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth);
@@ -192,18 +213,24 @@ int main()
     {
         float deltaTime=GetFrameTime();
         //main screen
+        Vector2 mousepos=GetMousePosition();
         if(currentState==STATE_MENU)
         {
-            if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) selectedOption=1;
-            if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W)) selectedOption=0;
-            if(IsKeyPressed(KEY_ENTER))
+            if(CheckCollisionPointRec(mousepos,startbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
-                if(selectedOption==0) currentState=STATE_GAMEPLAY;
-                else if(selectedOption==1) break;
+                PlaySound(clicksound);
+                PlayMusicStream(gamemusic);
+                currentState=STATE_GAMEPLAY;
+            }
+            if(CheckCollisionPointRec(mousepos,exitbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySound(clicksound);
+                break;
             }
         }
         else if(currentState==STATE_GAMEPLAY)
         {
+            UpdateMusicStream(gamemusic);
             if(playerHealth<=0)
             {
                 if(!deathAnimStarted)
@@ -323,7 +350,8 @@ int main()
                 {
                     isAttacking=true;
                     currentAttackType=1;
-                    currentAttackDuration=playerAnim.attack1Frames*PLAYER_FRAME_TIME;
+                    //currentAttackDuration=playerAnim.attack1Frames*PLAYER_FRAME_TIME;
+                    currentAttackDuration=ATTACK1_DURATION;
                     attackTimer=currentAttackDuration;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
@@ -332,7 +360,8 @@ int main()
                 {
                     isAttacking=true;
                     currentAttackType=2;
-                    currentAttackDuration=playerAnim.attack2Frames*PLAYER_FRAME_TIME;
+                    //currentAttackDuration=playerAnim.attack2Frames*PLAYER_FRAME_TIME;
+                    currentAttackDuration=ATTACK2_DURATION;
                     attackTimer=currentAttackDuration;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
@@ -343,38 +372,44 @@ int main()
                 {
                     attackTimer-=deltaTime;
 
-                     float attackRange=70.0f;
-                    Rectangle playerCollisionRec = {
-                        player.rec.x + PLAYER_OFFSET_X,
-                        player.rec.y + PLAYER_OFFSET_Y,
-                        PLAYER_COLLISION_WIDTH,
-                        PLAYER_COLLISION_HEIGHT
-                    };
-                    Rectangle attackBox=facingRight?(Rectangle){ playerCollisionRec.x+playerCollisionRec.width+PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRec.y, attackRange, playerCollisionRec.height }
-                        :(Rectangle){ playerCollisionRec.x-attackRange-PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRec.y, attackRange, playerCollisionRec.height };
+                    int hitStartFrame=(currentAttackType==1)?ATTACK1_HIT_START_FRAME:ATTACK2_HIT_START_FRAME;
+                    int hitEndFrame=(currentAttackType==1)?ATTACK1_HIT_END_FRAME:ATTACK2_HIT_END_FRAME;
+                    bool inHitWindow=(playerFrame>=hitStartFrame&&playerFrame<=hitEndFrame);
 
-                        for(int i=0;i<activeEnemyCount;i++)
+                    if(inHitWindow)
                     {
-                        bool alreadyDying=(enemies[i].animState==ENEMY_ANIM_HIT||enemies[i].animState==ENEMY_ANIM_DEATH);
-                        Rectangle enemyCollisionRec = {
-                            enemies[i].rec.x + ENEMY_OFFSET_X,
-                            enemies[i].rec.y + ENEMY_COLLISION_OFFSET_Y,
-                            ENEMY_COLLISION_WIDTH,
-                            ENEMY_COLLISION_HEIGHT
+                        float attackRange=70.0f;
+                        Rectangle playerCollisionRec = {
+                            player.rec.x + PLAYER_OFFSET_X,
+                            player.rec.y + PLAYER_OFFSET_Y,
+                            PLAYER_COLLISION_WIDTH,
+                            PLAYER_COLLISION_HEIGHT
                         };
-                        if(enemies[i].active&&!alreadyDying&&CheckCollisionRecs(attackBox, enemyCollisionRec))   
+                        Rectangle attackBox=facingRight?
+                            (Rectangle){ playerCollisionRec.x+playerCollisionRec.width+PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRec.y, attackRange, playerCollisionRec.height }
+                            :(Rectangle){ playerCollisionRec.x-attackRange-PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRec.y, attackRange, playerCollisionRec.height };
+                        for(int i=0;i<activeEnemyCount;i++)
                         {
-                            enemies[i].animState=ENEMY_ANIM_HIT;
-                            enemies[i].currentFrame=0;
-                            enemies[i].frameTimer=0.0f;
+                            bool alreadyDying=(enemies[i].animState==ENEMY_ANIM_HIT||enemies[i].animState==ENEMY_ANIM_DEATH);
+                            Rectangle enemyCollisionRec = {
+                                enemies[i].rec.x + ENEMY_OFFSET_X,
+                                enemies[i].rec.y + ENEMY_COLLISION_OFFSET_Y,
+                                ENEMY_COLLISION_WIDTH,
+                                ENEMY_COLLISION_HEIGHT
+                            };
+                            if(enemies[i].active&&!alreadyDying&&CheckCollisionRecs(attackBox, enemyCollisionRec))
+                            {
+                                enemies[i].animState=ENEMY_ANIM_HIT;
+                                enemies[i].currentFrame=0;
+                                enemies[i].frameTimer=0.0f;
+                            }
                         }
                     }
                     if(attackTimer<=0.0f)
                     {
                         isAttacking=false;
-                    }    
+                    }
                 }
-
                 //enemy auto
                 for(int i=0; i<activeEnemyCount; i++)
                 {
@@ -580,14 +615,12 @@ int main()
         ClearBackground((Color){20,20,30,255});
         if(currentState==STATE_MENU)
         {
-            int title_l=MeasureText("HOLLOW KNIGHT",55);
-            DrawText("HOLLOW KNIGHT",(screenWidth-title_l)/2,160,55,GOLD);
-            Color opt1Color=(selectedOption==0)?YELLOW:GRAY;
-            const char*opt1Text=(selectedOption==0)?"> Start New Game <":"Start New Game";
-            DrawText(opt1Text,(screenWidth-MeasureText(opt1Text,28))/2,270,28,opt1Color);
-            Color opt2Color=(selectedOption==1)?YELLOW:GRAY;
-            const char*opt2Text=(selectedOption==1)?"> Exit <":"Exit";
-           DrawText (opt2Text,(screenWidth-MeasureText(opt2Text,28))/2,320,28,opt2Color);
+            DrawTexture(menubg,0,0,WHITE);
+            DrawTextEx(myfont,"Main Menu",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Main Menu",80,2).x/2,screenHeight/2-150},80,2,(Color){48,120,148,255});
+            Color colstart=CheckCollisionPointRec(mousepos,startbtn)?GREEN:RED;
+            DrawTextEx(myfont,start,(Vector2){startbtn.x,startbtn.y},40,2,colstart);
+            Color colexit=CheckCollisionPointRec(mousepos,exitbtn)?GREEN:RED;
+            DrawTextEx(myfont,exit,(Vector2){exitbtn.x,exitbtn.y},40,2,colexit); 
         }
         else if(currentState==STATE_GAMEPLAY)
         {
