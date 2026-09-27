@@ -199,12 +199,13 @@ int main()
     Sound clicksound=LoadSound("assets/audio/clicksound.mp3");
     Music gamemusic=LoadMusicStream("assets/audio/Hollow Knight OST - Sealed Vessel.mp3");
     Texture2D currentBgTexture=bgTextureLvl1;
-
+    bool soundOn=true;
+    
     char* start="START GAME";
     char* exit="EXIT GAME";
     char* instruction="Instructions";
     char* credits="Credits";
-    
+
     Vector2 sizeStart=MeasureTextEx(myfont,start,40,2);
     Vector2 sizeExit=MeasureTextEx(myfont,exit,40,2);
     Vector2 sizeinstructions=MeasureTextEx(myfont,instruction,40,2);
@@ -223,6 +224,9 @@ int main()
         float deltaTime=GetFrameTime();
         //main screen
         Vector2 mousepos=GetMousePosition();
+        char* soundLabel=soundOn?"Sound: ON":"Sound: OFF";
+        Vector2 sizeSound=MeasureTextEx(myfont,soundLabel,40,2);
+        Rectangle soundbtn={screenWidth/2-sizeSound.x/2,450,sizeSound.x,sizeSound.y};
         if(currentState==STATE_MENU)
         {
             if(CheckCollisionPointRec(mousepos,startbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
@@ -245,6 +249,12 @@ int main()
             {
                 PlaySound(clicksound);
                 currentState=STATE_CREDITS;
+            }
+            if(CheckCollisionPointRec(mousepos,soundbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                soundOn=!soundOn;
+                SetMasterVolume(soundOn?1:0);
+                if(soundOn) PlaySound(clicksound);
             }
         }
         else if(currentState==STATE_INSTRUCTIONS)
@@ -658,6 +668,8 @@ int main()
             DrawTextEx(myfont,instruction,(Vector2){instrbtn.x,instrbtn.y},40,2,colinstr);
             Color colcred=CheckCollisionPointRec(mousepos,creditbtn)?GREEN:RED;
             DrawTextEx(myfont,credits,(Vector2){creditbtn.x,creditbtn.y},40,2,colcred);
+            Color colsound=CheckCollisionPointRec(mousepos,soundbtn)?GREEN:RED;
+            DrawTextEx(myfont,soundLabel,(Vector2){soundbtn.x,soundbtn.y},40,2,colsound);
         }
         else if(currentState==STATE_GAMEPLAY)
         {
