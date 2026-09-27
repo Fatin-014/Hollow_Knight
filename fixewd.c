@@ -283,12 +283,12 @@ int main()
     Vector2 sizeMedium=MeasureTextEx(myfont,medium,40,2);
     Vector2 sizeHard=MeasureTextEx(myfont,hard,40,2);
     
-    Rectangle highscorebtn={screenWidth/2-sizeHighscores.x/2,500,sizeHighscores.x,sizeHighscores.y};
+    Rectangle highscorebtn={screenWidth/2-sizeHighscores.x/2,300,sizeHighscores.x,sizeHighscores.y};
     Rectangle easybtn={screenWidth/2-sizeEasy.x/2,250,sizeEasy.x,sizeEasy.y};
     Rectangle mediumbtn={screenWidth/2-sizeMedium.x/2,320,sizeMedium.x,sizeMedium.y};
     Rectangle hardbtn={screenWidth/2-sizeHard.x/2,390,sizeHard.x,sizeHard.y};
     Rectangle startbtn={screenWidth/2-sizeStart.x/2,250,sizeStart.x,sizeStart.y};
-    Rectangle exitbtn={screenWidth/2-sizeExit.x/2,300,sizeExit.x,sizeExit.y};
+    Rectangle exitbtn={screenWidth/2-sizeExit.x/2,500,sizeExit.x,sizeExit.y};
     Rectangle instrbtn={screenWidth/2-sizeinstructions.x/2,350,sizeinstructions.x,sizeinstructions.y};
     Rectangle creditbtn={screenWidth/2-sizecredits.x/2,400,sizecredits.x,sizecredits.y};
 
