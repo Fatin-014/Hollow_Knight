@@ -1016,10 +1016,10 @@ int main()
         {
             const char*winText="VICTORY! YOU CLEARED ALL 3 LEVELS!";
             int winWidth=MeasureText(winText,32);
-            DrawText(winText,(screenWidth-winWidth)/2,220,32,GOLD);
+            DrawTextEx(myfont,winText,(Vector2){(screenWidth-winWidth)/2,220},32,2,GOLD);
             const char*subText="Press ENTER or R to Play Again";
             int subWidth=MeasureText(subText,20);
-            DrawText(subText,(screenWidth-subWidth)/2,300,20,RAYWHITE);
+            DrawTextEx(myfont,subText,(Vector2){(screenWidth-subWidth)/2,300},20,2,RAYWHITE);
             const char*scoreText=TextFormat("Final Score: %d",score);
             int scoreWidth=MeasureText(scoreText,24);
             DrawTextEx(myfont,scoreText,(Vector2){(screenWidth-scoreWidth)/2,340},24,2,YELLOW);
