@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#define ABSOLUTE_MAX_ENEMIES 6
+#define ABSOLUTE_MAX_ENEMIES 10
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
