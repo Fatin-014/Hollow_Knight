@@ -975,7 +975,7 @@ int main()
             DrawTextEx(myfont,hard,(Vector2){hardbtn.x,hardbtn.y},40,2,colHard);
             DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-130,screenHeight-60},20,2,GRAY);
         }
-        else if(currentState=STATE_HIGHSCORES)
+        else if(currentState==STATE_HIGHSCORES)
         {
             DrawTexture(menubg,0,0,WHITE);
             DrawTextEx(myfont,"High Scores",(Vector2){screenWidth/2-MeasureTextEx(myfont,"High Scores",60,2).x/2,100},60,2,(Color){48,120,148,255});
