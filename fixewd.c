@@ -5,9 +5,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#define LEVEL_INTRO_DURATION 2.0f
+#define LEVEL_INTRO_DURATION 2.5f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 1
+#define ABSOLUTE_MAX_ENEMIES 12
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
@@ -245,6 +245,17 @@ int LoadTopScores(HighScoreEntry *outEntries, int maxEntries)
     return n;
 }
 
+  //levelintro
+    bool showLevelIntro=false;
+    float levelIntroTimer=0;
+    int introLevelNumber=1;
+void StartLevelIntro(int level)
+{
+    showLevelIntro=true;
+    levelIntroTimer=LEVEL_INTRO_DURATION;
+    introLevelNumber=level;
+}
+
 int main()
 {
     InitWindow(screenWidth, screenHeight, "HOLLOW KNIGHT");
@@ -290,10 +301,6 @@ int main()
 
     //death
     bool deathAnimStarted=false;
-    //levelintro
-    bool showLevelIntro=false;
-    float levelIntroTimer=0;
-
     int jumpcount=0;
     bool showHitboxes=false; //toggled with T - draws every collision/attack rectangle in the boss room and normal rooms alike
 
@@ -488,6 +495,7 @@ int main()
                 SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
                 PlayMusicStream(gamemusic);
                 currentState=STATE_GAMEPLAY;
+                StartLevelIntro(currentLevel);
             }
             if(CheckCollisionPointRec(mousepos,mediumbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
@@ -496,6 +504,7 @@ int main()
                 SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
                 PlayMusicStream(gamemusic);
                 currentState=STATE_GAMEPLAY;
+                StartLevelIntro(currentLevel);
             }
             if(CheckCollisionPointRec(mousepos,hardbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
@@ -504,6 +513,7 @@ int main()
                 SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
                 PlayMusicStream(gamemusic);
                 currentState=STATE_GAMEPLAY;
+                StartLevelIntro(currentLevel);
             }
             if(IsKeyPressed(KEY_ESCAPE))
             {
@@ -630,7 +640,20 @@ int main()
 
                 if(player.rec.x<0) player.rec.x=0;
                 if(player.rec.x+player.rec.width>screenWidth) player.rec.x=screenWidth-player.rec.width;
-
+                if(currentLevel==BOSS_LEVEL&&boss.active)
+                {
+                    if(CheckCollisionRecs(player.rec, boss.rec))
+                    {
+                        if(player.rec.x<boss.rec.x)
+                        {
+                            player.rec.x=boss.rec.x-player.rec.width;   // push back to the left edge
+                        }
+                        else
+                        {
+                            player.rec.x=boss.rec.x+boss.rec.width;     // push back to the right edge
+                        }
+                    }
+                }
                 if(!isDashing) //dash ignores gravity for a flat slide, Hollow Knight-style
                 {
                     verticalVelocity+=GRAVITY*deltaTime;
@@ -736,6 +759,14 @@ int main()
                                 boss.currentFrame=0;
                                 boss.frameTimer=0.0f;
                                 boss.animState=(boss.health<=0)?BOSS_ANIM_DEATH:BOSS_ANIM_HIT;
+                                if(boss.health>0)
+                                {
+                                    //if the boss was mid-swing and got interrupted, it never reached the natural
+                                    //end-of-cleave cooldown assignment - give it a fresh cooldown here so hitting
+                                    //it back-to-back doesn't let every future attack fire instantly
+                                    float curBossCooldown=BOSS_ATTACK_COOLDOWN_BASE/bossAttackSpeedMultiplier[selectedDifficulty];
+                                    boss.attackCooldownTimer=curBossCooldown;
+                                }
                                 score+=(int)(15*difficultyScoreMultiplier[selectedDifficulty]);
                             }
                         }
@@ -946,15 +977,8 @@ int main()
                     }
                     else
                     {
-                        //boss stands in place: idle until you're within attack range (bigger on harder
-                        //difficulties), then cleaves - no walk/notice stage
-                        float bossCenterX=boss.rec.x+boss.rec.width/2.0f;
-                        float playerCenterX=player.rec.x+player.rec.width/2.0f;
-                        float dist=fabsf(playerCenterX-bossCenterX);
-
                         if(boss.attackCooldownTimer>0.0f) boss.attackCooldownTimer-=deltaTime;
-
-                        if(dist<=curBossAttackRange&&boss.attackCooldownTimer<=0.0f)
+                        if(boss.attackCooldownTimer<=0.0f)
                         {
                             boss.animState=BOSS_ANIM_CLEAVE;
                             boss.currentFrame=0;
@@ -970,7 +994,7 @@ int main()
                                 if(bossAnim.idle.count>0&&boss.currentFrame>=bossAnim.idle.count) boss.currentFrame=0;
                             }
                         }
-                    }
+                    } 
                 }
 
                 //picking which player animation should be playing right now
@@ -1055,6 +1079,7 @@ int main()
                     {
                         score+=(int)(50*difficultyScoreMultiplier[selectedDifficulty]);
                         currentLevel++;
+                        StartLevelIntro(currentLevel);
                         player.rec.x=50.0f;
                         if(currentLevel==2&&bgTextureLvl2.id!=0) currentBgTexture=bgTextureLvl2;
                         else if(currentLevel==3&&bgTextureLvl3.id!=0) currentBgTexture=bgTextureLvl3;
@@ -1242,13 +1267,13 @@ int main()
                 }
                 //boss health bar
                 float barW=300.0f, barH=20.0f;
-                float barX=screenWidth/2.0f-barW/2.0f, barY=20.0f;
+                float barX=screenWidth/2.0f-barW/2.0f, barY=50.0f;
                 DrawRectangle((int)barX,(int)barY,(int)barW,(int)barH,DARKGRAY);
                 float healthRatio=(float)boss.health/(float)BOSS_MAX_HEALTH;
                 if(healthRatio<0.0f) healthRatio=0.0f;
                 DrawRectangle((int)barX,(int)barY,(int)(barW*healthRatio),(int)barH,RED);
                 DrawRectangleLines((int)barX,(int)barY,(int)barW,(int)barH,WHITE);
-                DrawTextEx(myfont,"DEMON",(Vector2){barX,barY-26},20,2,GOLD);
+                DrawTextEx(myfont,"DEMON",(Vector2){barX+100,barY-26},20,2,GOLD);
             }
 
             //--- hitbox visualization: T toggles this on/off ---
@@ -1332,6 +1357,117 @@ int main()
                 bossAnim.idle.frames[0].id, bossAnim.cleave.frames[0].id,
                 bossAnim.hit.frames[0].id, bossAnim.death.frames[0].id), 10, 570, 14, LIME);
             //--- END TEMP DEBUG ---
+            //==================================================
+// LEVEL INTRO ANIMATION
+//==================================================
+if(showLevelIntro)
+{
+    float progress=1.0f-(levelIntroTimer/LEVEL_INTRO_DURATION);
+
+    // Clamp progress between 0 and 1
+    if(progress<0.0f) progress=0.0f;
+    if(progress>1.0f) progress=1.0f;
+
+    // Fade in during first half, fade out during second half
+    float alpha;
+
+    if(progress<0.5f)
+    {
+        alpha=progress*2.0f;
+    }
+    else
+    {
+        alpha=(1.0f-progress)*2.0f;
+    }
+
+    if(alpha<0.0f) alpha=0.0f;
+    if(alpha>1.0f) alpha=1.0f;
+
+    // Dark overlay
+    DrawRectangle(
+        0,
+        0,
+        screenWidth,
+        screenHeight,
+        (Color){0,0,0,(unsigned char)(180*alpha)}
+    );
+
+    // Small pulse effect
+    float pulse=sinf(progress*PI*4.0f)*5.0f;
+
+    // LEVEL X
+    char levelText[32];
+    sprintf(levelText,"LEVEL %d",introLevelNumber);
+
+    float fontSize=80.0f+pulse;
+
+    Vector2 levelSize=MeasureTextEx(
+        myfont,
+        levelText,
+        fontSize,
+        2
+    );
+
+    DrawTextEx(
+        myfont,
+        levelText,
+        (Vector2){
+            screenWidth/2.0f-levelSize.x/2.0f,
+            screenHeight/2.0f-70.0f
+        },
+        fontSize,
+        2,
+        (Color){
+            255,
+            255,
+            255,
+            (unsigned char)(255*alpha)
+        }
+    );
+
+    // STARTING...
+    const char *startingText="STARTING...";
+
+    Vector2 startingSize=MeasureTextEx(
+        myfont,
+        startingText,
+        30,
+        2
+    );
+
+    DrawTextEx(
+        myfont,
+        startingText,
+        (Vector2){
+            screenWidth/2.0f-startingSize.x/2.0f,
+            screenHeight/2.0f+30.0f
+        },
+        30,
+        2,
+        (Color){
+            220,
+            220,
+            220,
+            (unsigned char)(255*alpha)
+        }
+    );
+
+    // Decorative horizontal lines
+    float lineWidth=300.0f*alpha;
+
+    DrawRectangle(
+        (int)(screenWidth/2.0f-lineWidth/2.0f),
+        screenHeight/2+80,
+        (int)lineWidth,
+        3,
+        (Color){
+            255,
+            255,
+            255,
+            (unsigned char)(200*alpha)
+        }
+    );
+}
         }
         else if(currentState==STATE_INSTRUCTIONS)
         {
@@ -1498,7 +1634,7 @@ void SpawnBoss(Boss *boss, float groundLevel, int screenW)
     boss->animState=BOSS_ANIM_IDLE;
     boss->currentFrame=0;
     boss->frameTimer=0.0f;
-    boss->attackCooldownTimer=0.0f;
+    boss->attackCooldownTimer=6.0f;
 }
 
 void LoadAnimFrames(AnimFrames *anim, const char *folder, const char *prefix, int count)
