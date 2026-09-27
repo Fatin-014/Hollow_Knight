@@ -1,12 +1,13 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <math.h>
-#include<stddef.h>
-#include<stdio.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdbool.h>
 
 #define LEVEL_INTRO_DURATION 2.0f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 12
+#define ABSOLUTE_MAX_ENEMIES 1
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
@@ -19,10 +20,11 @@
 #define SPRITE_OFFSET_Y 180.0f
 #define ENEMY_OFFSET_Y -12.0f
 #define ENEMY_FRAME_TIME (1.0f/10.0f) //how fast goblin animation strips advance
-#define PLAYER_FRAME_TIME (1.0f/12.0f) //how fast the knight's animation strips advance
+#define PLAYER_FRAME_TIME (1.0f/12.0f) //how fast idle/run/jump/fall/dash/hurt/death advance
 #define DASH_SPEED 700.0f
 #define DASH_DURATION 0.2f   //how long the dash's forward slide lasts
 #define DASH_COOLDOWN 3.0f   //time before you can dash again
+
 // attack fixing
 #define PLAYER_COLLISION_WIDTH 40.0f
 #define PLAYER_COLLISION_HEIGHT 80.0f
@@ -40,7 +42,35 @@
 #define ATTACK1_DURATION 0.4f
 #define ATTACK2_DURATION 0.6f
 
+// rooms / levels
+#define MAX_LEVEL 6      //rooms 1-5 have goblins, room 6 (BOSS_LEVEL) is the demon boss
+#define BOSS_LEVEL 6
 
+// boss (demon) - sprites are separate numbered PNGs per frame, not one strip
+#define MAX_ANIM_FRAMES 24        //big enough to hold the 22-frame death animation
+#define BOSS_MAX_HEALTH 8
+#define BOSS_FRAME_TIME (1.0f/10.0f)
+#define BOSS_ATTACK_RANGE_BASE 150.0f      //player must be this close (+ difficulty bonus) for the boss to swing
+#define BOSS_ATTACK_COOLDOWN_BASE 1.0f     //time after a swing before the boss can attack again, before difficulty speed-up
+#define BOSS_HIT_START_FRAME 6             //frame range of demon_cleave that can actually hit the player
+#define BOSS_HIT_END_FRAME 9
+//NOTE: these collision/offset/scale numbers are guesses since the real sprite pixel sizes aren't known -
+//run the game and adjust these until the boss's hitbox and sprite line up with what's on screen.
+#define BOSS_COLLISION_WIDTH 70.0f
+#define BOSS_COLLISION_HEIGHT 130.0f
+#define BOSS_OFFSET_X 40.0f
+#define BOSS_COLLISION_OFFSET_Y 10.0f
+#define BOSS_ATTACK_FORWARD_OFFSET 0.0f
+#define BOSS_ATTACK_RANGE_BOX_BASE 90.0f   //actual reach of the boss's swing, before difficulty bonus
+#define BOSS_SPRITE_SCALE 2.5f
+//if the boss still visually faces the wrong way even though boss.facingRight is now correctly driven by
+//the player's relative position, it means the raw demon PNGs default to facing the opposite direction than
+//assumed here - flip this one value (true<->false) rather than touching the facing logic itself
+#define BOSS_SPRITE_DEFAULT_FACES_RIGHT false
+#define BOSS_SPRITE_OFFSET_X 0.0f
+#define BOSS_SPRITE_OFFSET_Y 0.0f
+#define BOSS_REC_WIDTH 80.0f
+#define BOSS_REC_HEIGHT 140.0f
 
 typedef enum GameState
 {
@@ -64,7 +94,14 @@ typedef enum Difficulty
 }Difficulty;
 
 float difficultyScoreMultiplier[3]={1.0f, 1.5f, 2.0f};
-int difficultyEnemyHealth[3]={1,2,4};
+//how many goblins can be active at once per difficulty (easy/medium/hard)
+int difficultyMaxEnemies[3]={6, 8, 10};
+//enemy movement speed multiplier per difficulty, relative to easy as the 1.0x baseline
+float enemySpeedMultiplier[3]={1.0f, 1.5f, 2.0f};
+//extra pixels added to the boss's attack range (both sides, since the range check is symmetric) per difficulty
+float bossRangeBonus[3]={0.0f, 20.0f, 40.0f};
+//how much faster the boss's swing animation + attack cooldown are per difficulty
+float bossAttackSpeedMultiplier[3]={1.0f, 1.2f, 1.5f};
 
 typedef enum EnemyAnimState
 {
@@ -88,6 +125,14 @@ typedef enum PlayerAnimState
     PLAYER_ANIM_DEATH
 } PlayerAnimState;
 
+typedef enum BossAnimState
+{
+    BOSS_ANIM_IDLE,
+    BOSS_ANIM_CLEAVE, //its attack
+    BOSS_ANIM_HIT,
+    BOSS_ANIM_DEATH
+} BossAnimState;
+
 typedef struct Enemy
 {
     Rectangle rec;
@@ -99,8 +144,6 @@ typedef struct Enemy
     EnemyAnimState animState;
     int currentFrame;
     float frameTimer;
-    int health;
-    int maxHealth;
 } Enemy;
 
 //holds each goblin animation strip + how many frames it contains, loaded once and shared by every goblin
@@ -127,12 +170,42 @@ typedef struct PlayerAnimSet
     Texture2D death;   int deathFrames;
 } PlayerAnimSet;
 
+//the demon's sprites come as separate numbered files per frame (demon_idle_1.png, _2.png, ...)
+//instead of one strip, so each animation is just an array of individually-loaded textures
+typedef struct AnimFrames
+{
+    Texture2D frames[MAX_ANIM_FRAMES];
+    int count;
+} AnimFrames;
+
+typedef struct BossAnimSet
+{
+    AnimFrames idle;
+    AnimFrames cleave;
+    AnimFrames hit;
+    AnimFrames death;
+} BossAnimSet;
+
+typedef struct Boss
+{
+    Rectangle rec;
+    bool active;
+    int health;
+    bool facingRight;
+    BossAnimState animState;
+    int currentFrame;
+    float frameTimer;
+    float attackCooldownTimer;
+} Boss;
+
 typedef struct Player
 {
     Rectangle rec;
 } Player;
 
-void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW,int enemyHealth);
+void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW, Difficulty difficulty);
+void SpawnBoss(Boss *boss, float groundLevel, int screenW);
+void LoadAnimFrames(AnimFrames *anim, const char *folder, const char *prefix, int count);
 
 typedef struct HighScoreEntry
 {
@@ -209,7 +282,8 @@ int main()
     bool isAttacking=false;
     float attackTimer=0.0f;
     float currentAttackDuration=0.0f;
-    int currentAttackType=1; //1 = left mouse (Attack 1.png), 2 = right mouse (Attack 2.png)
+    float attackFrameTime=PLAYER_FRAME_TIME; //fix: how fast THIS attack's frames advance, so the whole strip fits inside currentAttackDuration
+    int currentAttackType=1; //1 = Q / left mouse (Attack 1.png), 2 = E / right mouse (Attack 2.png)
 
     //dash
     bool isDashing=false;
@@ -227,11 +301,17 @@ int main()
     float levelIntroTimer=0;
 
     int jumpcount=0;
+    bool showHitboxes=false; //toggled with T - draws every collision/attack rectangle in the boss room and normal rooms alike
 
     //level up
     int currentLevel=1;
     int activeEnemyCount=0;
     Enemy enemies[ABSOLUTE_MAX_ENEMIES]={0};
+
+    //boss
+    Boss boss={0};
+    boss.health=BOSS_MAX_HEALTH;
+    boss.animState=BOSS_ANIM_IDLE;
 
     //--- goblin enemy animations ---
     EnemyAnimSet goblinAnim={0};
@@ -259,10 +339,22 @@ int main()
 
     const float hurtAnimDuration=playerAnim.hurtFrames*PLAYER_FRAME_TIME;
 
-    // Level Backgrounds
+    //--- boss (demon) animations ---
+    //fix: copy the assets/demon folder (with its 01_demon_idle, 03_demon_cleave, etc subfolders) into your
+    //project's assets/demon folder, keeping the exact same subfolder and file names. Walk sprites aren't used.
+    BossAnimSet bossAnim={0};
+    LoadAnimFrames(&bossAnim.idle,   "01_demon_idle",     "demon_idle",     6);
+    LoadAnimFrames(&bossAnim.cleave, "03_demon_cleave",   "demon_cleave",   15);
+    LoadAnimFrames(&bossAnim.hit,    "04_demon_take_hit", "demon_take_hit", 5);
+    LoadAnimFrames(&bossAnim.death,  "05_demon_death",    "demon_death",    22);
+
+    // Level Backgrounds - rooms 1-5 (goblins) + a boss-room background
     Texture2D bgTextureLvl1=LoadTexture("assets/bg.png");
     Texture2D bgTextureLvl2=LoadTexture("assets/bg2.png");
     Texture2D bgTextureLvl3=LoadTexture("assets/bg3.png");
+    Texture2D bgTextureLvl4=LoadTexture("assets/bg4.png");
+    Texture2D bgTextureLvl5=LoadTexture("assets/bg5.png");
+    Texture2D bgTextureBoss=LoadTexture("assets/bg_boss.png");
     Texture2D menubg=LoadTexture("assets/menubg.png");
     Font myfont=LoadFontEx("assets/themefont.TTF",100,NULL,0);
     Sound clicksound=LoadSound("assets/audio/clicksound.mp3");
@@ -288,17 +380,17 @@ int main()
     Vector2 sizeMedium=MeasureTextEx(myfont,medium,40,2);
     Vector2 sizeHard=MeasureTextEx(myfont,hard,40,2);
     
-    Rectangle highscorebtn={screenWidth/2-sizeHighscores.x/2,300,sizeHighscores.x,sizeHighscores.y};
+    Rectangle highscorebtn={screenWidth/2-sizeHighscores.x/2,500,sizeHighscores.x,sizeHighscores.y};
     Rectangle easybtn={screenWidth/2-sizeEasy.x/2,250,sizeEasy.x,sizeEasy.y};
     Rectangle mediumbtn={screenWidth/2-sizeMedium.x/2,320,sizeMedium.x,sizeMedium.y};
     Rectangle hardbtn={screenWidth/2-sizeHard.x/2,390,sizeHard.x,sizeHard.y};
     Rectangle startbtn={screenWidth/2-sizeStart.x/2,250,sizeStart.x,sizeStart.y};
-    Rectangle exitbtn={screenWidth/2-sizeExit.x/2,500,sizeExit.x,sizeExit.y};
+    Rectangle exitbtn={screenWidth/2-sizeExit.x/2,300,sizeExit.x,sizeExit.y};
     Rectangle instrbtn={screenWidth/2-sizeinstructions.x/2,350,sizeinstructions.x,sizeinstructions.y};
     Rectangle creditbtn={screenWidth/2-sizecredits.x/2,400,sizecredits.x,sizecredits.y};
 
     //level 1 shuru
-    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth,difficultyEnemyHealth[selectedDifficulty]);
+    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
 
     while(!WindowShouldClose())
     {
@@ -397,6 +489,9 @@ int main()
             {
                 PlaySound(clicksound);
                 selectedDifficulty=DIFF_EASY;
+                //fix: room 1 was always spawned at startup with the default (medium) difficulty and never
+                //re-spawned when a difficulty was actually picked, so easy/hard never applied to room 1
+                SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
                 PlayMusicStream(gamemusic);
                 currentState=STATE_GAMEPLAY;
             }
@@ -404,6 +499,7 @@ int main()
             {
                 PlaySound(clicksound);
                 selectedDifficulty=DIFF_MEDIUM;
+                SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
                 PlayMusicStream(gamemusic);
                 currentState=STATE_GAMEPLAY;
             }
@@ -411,6 +507,7 @@ int main()
             {
                 PlaySound(clicksound);
                 selectedDifficulty=DIFF_HARD;
+                SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
                 PlayMusicStream(gamemusic);
                 currentState=STATE_GAMEPLAY;
             }
@@ -422,6 +519,7 @@ int main()
         else if(currentState==STATE_GAMEPLAY)
         {
             UpdateMusicStream(gamemusic);
+            if(IsKeyPressed(KEY_T)) showHitboxes=!showHitboxes;
             if(playerHealth<=0)
             {
                 if(!deathAnimStarted)
@@ -466,7 +564,13 @@ int main()
                     playerAnimState=PLAYER_ANIM_IDLE;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
-                    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth,difficultyEnemyHealth[selectedDifficulty]);
+                    boss.active=false;
+                    boss.health=BOSS_MAX_HEALTH;
+                    boss.animState=BOSS_ANIM_IDLE;
+                    boss.currentFrame=0;
+                    boss.frameTimer=0.0f;
+                    boss.attackCooldownTimer=0.0f;
+                    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
                     currentState=STATE_MENU;
                 }
             }
@@ -533,7 +637,7 @@ int main()
                 if(player.rec.x<0) player.rec.x=0;
                 if(player.rec.x+player.rec.width>screenWidth) player.rec.x=screenWidth-player.rec.width;
 
-                if(!isDashing) //fix: dash ignores gravity for a flat slide, Hollow Knight-style
+                if(!isDashing) //dash ignores gravity for a flat slide, Hollow Knight-style
                 {
                     verticalVelocity+=GRAVITY*deltaTime;
                     player.rec.y+=verticalVelocity*deltaTime;
@@ -556,23 +660,26 @@ int main()
                     jumpcount+=1;
                 }
 
-                //attack triggers: left mouse = Attack 1, right mouse = Attack 2
-                if((IsKeyPressed(KEY_J)||IsMouseButtonPressed(MOUSE_BUTTON_LEFT))&&!isAttacking&&!isDashing)
+                //attack triggers: Q or left mouse = Attack 1, E or right mouse = Attack 2
+                if((IsKeyPressed(KEY_Q)||IsMouseButtonPressed(MOUSE_BUTTON_LEFT))&&!isAttacking&&!isDashing)
                 {
                     isAttacking=true;
                     currentAttackType=1;
-                    //currentAttackDuration=playerAnim.attack1Frames*PLAYER_FRAME_TIME;
                     currentAttackDuration=ATTACK1_DURATION;
+                    //fix: play all attack1Frames within ATTACK1_DURATION instead of the fixed global PLAYER_FRAME_TIME,
+                    //which was cutting the strip off early (same root cause as the attack2 bug you flagged)
+                    attackFrameTime=currentAttackDuration/(float)playerAnim.attack1Frames;
                     attackTimer=currentAttackDuration;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
                 }
-                else if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)&&!isAttacking&&!isDashing)
+                else if((IsKeyPressed(KEY_E)||IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))&&!isAttacking&&!isDashing)
                 {
                     isAttacking=true;
                     currentAttackType=2;
-                    //currentAttackDuration=playerAnim.attack2Frames*PLAYER_FRAME_TIME;
                     currentAttackDuration=ATTACK2_DURATION;
+                    //fix: same idea - play all attack2Frames within ATTACK2_DURATION instead of getting cut off
+                    attackFrameTime=currentAttackDuration/(float)playerAnim.attack2Frames;
                     attackTimer=currentAttackDuration;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
@@ -610,14 +717,28 @@ int main()
                             };
                             if(enemies[i].active&&!alreadyDying&&CheckCollisionRecs(attackBox, enemyCollisionRec))
                             {
-                               enemies[i].health--;
                                 enemies[i].animState=ENEMY_ANIM_HIT;
                                 enemies[i].currentFrame=0;
                                 enemies[i].frameTimer=0.0f;
-                                if(enemies[i].health<=0)
-                                {
                                 score+=(int)(10*difficultyScoreMultiplier[selectedDifficulty]);
-                                }
+                            }
+                        }
+                        //same attack box also lands on the boss when we're in the boss room
+                        if(currentLevel==BOSS_LEVEL&&boss.active&&boss.animState!=BOSS_ANIM_HIT&&boss.animState!=BOSS_ANIM_DEATH)
+                        {
+                            //fix: mirror the offset when the boss faces left, same as its sprite does - a
+                            //static rightward-only offset only ever lined up with the demon's body when it
+                            //happened to be facing right
+                            Rectangle bossCollisionRec = boss.facingRight?
+                                (Rectangle){ boss.rec.x+BOSS_OFFSET_X, boss.rec.y+BOSS_COLLISION_OFFSET_Y, BOSS_COLLISION_WIDTH, BOSS_COLLISION_HEIGHT }
+                                :(Rectangle){ boss.rec.x+boss.rec.width-BOSS_OFFSET_X-BOSS_COLLISION_WIDTH, boss.rec.y+BOSS_COLLISION_OFFSET_Y, BOSS_COLLISION_WIDTH, BOSS_COLLISION_HEIGHT };
+                            if(CheckCollisionRecs(attackBox, bossCollisionRec))
+                            {
+                                boss.health--;
+                                boss.currentFrame=0;
+                                boss.frameTimer=0.0f;
+                                boss.animState=(boss.health<=0)?BOSS_ANIM_DEATH:BOSS_ANIM_HIT;
+                                score+=(int)(15*difficultyScoreMultiplier[selectedDifficulty]);
                             }
                         }
                     }
@@ -653,14 +774,7 @@ int main()
                             e->currentFrame++;
                             if(e->currentFrame>=goblinAnim.hitFrames)
                             {
-                                if(e->health<=0)
-                                {
                                 e->animState=ENEMY_ANIM_DEATH;
-                                }
-                                else
-                                {
-                                    e->animState=ENEMY_ANIM_RUN;
-                                }
                                 e->currentFrame=0;
                                 e->frameTimer=0.0f;
                             }
@@ -738,6 +852,122 @@ int main()
                         }
                 }
 
+                //--- boss update (only relevant in the boss room) ---
+                if(currentLevel==BOSS_LEVEL&&boss.active)
+                {
+                    float curBossAttackRange=BOSS_ATTACK_RANGE_BASE+bossRangeBonus[selectedDifficulty];
+                    float curBossAttackRangeBox=BOSS_ATTACK_RANGE_BOX_BASE+bossRangeBonus[selectedDifficulty];
+                    float curBossFrameTime=BOSS_FRAME_TIME/bossAttackSpeedMultiplier[selectedDifficulty]; //faster swing on higher difficulty
+                    float curBossCooldown=BOSS_ATTACK_COOLDOWN_BASE/bossAttackSpeedMultiplier[selectedDifficulty]; //attacks more often too
+
+                    //fix: always track the player's relative position to decide which way the boss faces
+                    //(and therefore which way it attacks), in every state except while a swing is actively
+                    //playing - freezing only during CLEAVE stops it spinning around mid-attack, but idle,
+                    //hit-reaction and death should still turn to keep facing you
+                    if(boss.animState!=BOSS_ANIM_CLEAVE)
+                    {
+                        float bossCenterXFacing=boss.rec.x+boss.rec.width/2.0f;
+                        float playerCenterXFacing=player.rec.x+player.rec.width/2.0f;
+                        boss.facingRight=(playerCenterXFacing>=bossCenterXFacing);
+                    }
+
+                    if(boss.animState==BOSS_ANIM_DEATH)
+                    {
+                        boss.frameTimer+=deltaTime;
+                        if(boss.frameTimer>=BOSS_FRAME_TIME)
+                        {
+                            boss.frameTimer=0.0f;
+                            boss.currentFrame++;
+                            if(boss.currentFrame>=bossAnim.death.count) boss.active=false; //boss fully gone -> level-clear check below sees this
+                        }
+                    }
+                    else if(boss.animState==BOSS_ANIM_HIT)
+                    {
+                        boss.frameTimer+=deltaTime;
+                        if(boss.frameTimer>=BOSS_FRAME_TIME)
+                        {
+                            boss.frameTimer=0.0f;
+                            boss.currentFrame++;
+                            if(boss.currentFrame>=bossAnim.hit.count)
+                            {
+                                boss.animState=BOSS_ANIM_IDLE;
+                                boss.currentFrame=0;
+                                boss.frameTimer=0.0f;
+                            }
+                        }
+                    }
+                    else if(boss.animState==BOSS_ANIM_CLEAVE)
+                    {
+                        boss.frameTimer+=deltaTime;
+                        if(boss.frameTimer>=curBossFrameTime)
+                        {
+                            boss.frameTimer=0.0f;
+                            boss.currentFrame++;
+                            if(boss.currentFrame>=bossAnim.cleave.count)
+                            {
+                                boss.animState=BOSS_ANIM_IDLE;
+                                boss.currentFrame=0;
+                                boss.frameTimer=0.0f;
+                                boss.attackCooldownTimer=curBossCooldown;
+                            }
+                        }
+                        //the boss's own hit window against the player - dodge by moving/dashing out of the box
+                        bool bossInHitWindow=(boss.currentFrame>=BOSS_HIT_START_FRAME&&boss.currentFrame<=BOSS_HIT_END_FRAME);
+                        if(bossInHitWindow&&!isInvincible&&!isDashing)
+                        {
+                            Rectangle playerCollisionRec = {
+                                player.rec.x + PLAYER_OFFSET_X,
+                                player.rec.y + PLAYER_OFFSET_Y,
+                                PLAYER_COLLISION_WIDTH,
+                                PLAYER_COLLISION_HEIGHT
+                            };
+                            Rectangle bossAttackBox=boss.facingRight?
+                                (Rectangle){ boss.rec.x+boss.rec.width+BOSS_ATTACK_FORWARD_OFFSET, boss.rec.y, curBossAttackRangeBox, boss.rec.height }
+                                :(Rectangle){ boss.rec.x-curBossAttackRangeBox-BOSS_ATTACK_FORWARD_OFFSET, boss.rec.y, curBossAttackRangeBox, boss.rec.height };
+                            if(CheckCollisionRecs(bossAttackBox, playerCollisionRec))
+                            {
+                                playerHealth--;
+                                isInvincible=true;
+                                invincibilityTimer=invincibilityDuration;
+                                isHurt=true;
+                                hurtTimer=hurtAnimDuration;
+                                playerFrame=0;
+                                playerFrameTimer=0.0f;
+                                if(player.rec.x<boss.rec.x) player.rec.x-=50.0f;
+                                else player.rec.x+=50.0f;
+                                verticalVelocity=-200.0f;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        //boss stands in place: idle until you're within attack range (bigger on harder
+                        //difficulties), then cleaves - no walk/notice stage
+                        float bossCenterX=boss.rec.x+boss.rec.width/2.0f;
+                        float playerCenterX=player.rec.x+player.rec.width/2.0f;
+                        float dist=fabsf(playerCenterX-bossCenterX);
+
+                        if(boss.attackCooldownTimer>0.0f) boss.attackCooldownTimer-=deltaTime;
+
+                        if(dist<=curBossAttackRange&&boss.attackCooldownTimer<=0.0f)
+                        {
+                            boss.animState=BOSS_ANIM_CLEAVE;
+                            boss.currentFrame=0;
+                            boss.frameTimer=0.0f;
+                        }
+                        else
+                        {
+                            boss.frameTimer+=deltaTime;
+                            if(boss.frameTimer>=BOSS_FRAME_TIME)
+                            {
+                                boss.frameTimer=0.0f;
+                                boss.currentFrame++;
+                                if(bossAnim.idle.count>0&&boss.currentFrame>=bossAnim.idle.count) boss.currentFrame=0;
+                            }
+                        }
+                    }
+                }
+
                 //picking which player animation should be playing right now
                 PlayerAnimState newAnimState;
                 if(isAttacking) newAnimState=(currentAttackType==1)?PLAYER_ANIM_ATTACK1:PLAYER_ANIM_ATTACK2;
@@ -769,8 +999,16 @@ int main()
                 }
                 if(curPlayerFrameCount<1) curPlayerFrameCount=1;
 
+                //fix: attacks advance at their own rate (attackFrameTime) so the full strip plays out
+                //within ATTACK1_DURATION/ATTACK2_DURATION; everything else uses the normal PLAYER_FRAME_TIME.
+                //this is the actual fix for the "older" attack2 animation issue you flagged - previously
+                //every animation state advanced at the same fixed PLAYER_FRAME_TIME regardless of how short
+                //ATTACK1_DURATION/ATTACK2_DURATION were, so both attacks got visually cut off early.
+                bool isAttackAnim=(playerAnimState==PLAYER_ANIM_ATTACK1||playerAnimState==PLAYER_ANIM_ATTACK2);
+                float curFrameTime=isAttackAnim?attackFrameTime:PLAYER_FRAME_TIME;
+
                 playerFrameTimer+=deltaTime;
-                if(playerFrameTimer>=PLAYER_FRAME_TIME)
+                if(playerFrameTimer>=curFrameTime)
                 {
                     playerFrameTimer=0.0f;
                     playerFrame++;
@@ -783,20 +1021,12 @@ int main()
                 }
 
                 //level par korar part
-                bool allEnemiesDefeated=true;
-                for(int i=0;i<activeEnemyCount;i++)
+                if(currentLevel==BOSS_LEVEL)
                 {
-                    if(enemies[i].active)
+                    //boss room clears the instant the boss's death animation finishes (see boss update above)
+                    if(!boss.active)
                     {
-                        allEnemiesDefeated=false;
-                        break;
-                    }
-                }
-                if(allEnemiesDefeated)
-                {
-                    if(currentLevel>=3)
-                    {
-                        score+=(int)(100*difficultyScoreMultiplier[selectedDifficulty]);
+                        score+=(int)(200*difficultyScoreMultiplier[selectedDifficulty]);
                         if(!scoreSaved)
                         {
                             SaveScore(playerName,score);
@@ -804,14 +1034,38 @@ int main()
                         }
                         currentState=STATE_VICTORY;
                     }
-                    else
+                }
+                else
+                {
+                    bool allEnemiesDefeated=true;
+                    for(int i=0;i<activeEnemyCount;i++)
+                    {
+                        if(enemies[i].active)
+                        {
+                            allEnemiesDefeated=false;
+                            break;
+                        }
+                    }
+                    if(allEnemiesDefeated)
                     {
                         score+=(int)(50*difficultyScoreMultiplier[selectedDifficulty]);
                         currentLevel++;
                         player.rec.x=50.0f;
                         if(currentLevel==2&&bgTextureLvl2.id!=0) currentBgTexture=bgTextureLvl2;
                         else if(currentLevel==3&&bgTextureLvl3.id!=0) currentBgTexture=bgTextureLvl3;
-                        SpawnLevelEnemies(enemies, currentLevel,&activeEnemyCount,GROUND_LEVEL,screenWidth,difficultyEnemyHealth[selectedDifficulty]);
+                        else if(currentLevel==4&&bgTextureLvl4.id!=0) currentBgTexture=bgTextureLvl4;
+                        else if(currentLevel==5&&bgTextureLvl5.id!=0) currentBgTexture=bgTextureLvl5;
+                        else if(currentLevel==BOSS_LEVEL&&bgTextureBoss.id!=0) currentBgTexture=bgTextureBoss;
+
+                        if(currentLevel==BOSS_LEVEL)
+                        {
+                            activeEnemyCount=0; //no goblins in the boss room
+                            SpawnBoss(&boss, GROUND_LEVEL, screenWidth);
+                        }
+                        else
+                        {
+                            SpawnLevelEnemies(enemies, currentLevel,&activeEnemyCount,GROUND_LEVEL,screenWidth,selectedDifficulty);
+                        }
                     }
                 }
             }
@@ -834,15 +1088,20 @@ int main()
                 isHurt=false;
                 hurtTimer=0.0f;
                 deathAnimStarted=false;
-                scoreSaved=false;
-                score=0;              
+                scoreSaved=false;               
                 playerName[0]='\0';     
                 nameLetterCount=0;  
                 playerAnimState=PLAYER_ANIM_IDLE;
                 playerFrame=0;
                 playerFrameTimer=0.0f;
-                SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth,difficultyEnemyHealth[selectedDifficulty]);
-                currentState=STATE_MENU;
+                boss.active=false;
+                boss.health=BOSS_MAX_HEALTH;
+                boss.animState=BOSS_ANIM_IDLE;
+                boss.currentFrame=0;
+                boss.frameTimer=0.0f;
+                boss.attackCooldownTimer=0.0f;
+                SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
+                currentState=STATE_GAMEPLAY;
             }
         }
 
@@ -929,39 +1188,105 @@ int main()
                     Rectangle src={ frame*frameW, 0.0f, srcW, frameH };
                     Rectangle dest={ enemies[i].rec.x, enemies[i].rec.y+ENEMY_OFFSET_Y, enemies[i].rec.width, enemies[i].rec.height };
                     DrawTexturePro(tex,src,dest,(Vector2){0, 0},0.0f,WHITE);
-                    if(enemies[i].active&&enemies[i].animState!=ENEMY_ANIM_DEATH&&enemies[i].maxHealth>1)
-                    {
-                        float barWidth=40.0f;
-                        float barHeight=5.0f;
-                        float barX=enemies[i].rec.x+(enemies[i].rec.width-barWidth)/2.0f;
-                        float barY=enemies[i].rec.y+ENEMY_OFFSET_Y-10.0f;
-                        float healthRatio=(float)enemies[i].health/(float)enemies[i].maxHealth;
-                        if(healthRatio<0.0f) healthRatio=0.0f;
+                }
+            }
 
-                        DrawRectangle(barX,barY,barWidth,barHeight,(Color){40,40,40,255});          // background
-                        DrawRectangle(barX,barY,barWidth*healthRatio,barHeight,RED);                 // fill
-                        DrawRectangleLines(barX,barY,barWidth,barHeight,BLACK);                      // border
+            //--- boss draw (frame-by-frame textures, not a strip - pick the array + index, not a slice) ---
+            if(currentLevel==BOSS_LEVEL&&boss.active)
+            {
+                AnimFrames *curBossAnim;
+                switch(boss.animState)
+                {
+                    case BOSS_ANIM_IDLE:   curBossAnim=&bossAnim.idle;   break;
+                    case BOSS_ANIM_CLEAVE: curBossAnim=&bossAnim.cleave; break;
+                    case BOSS_ANIM_HIT:    curBossAnim=&bossAnim.hit;    break;
+                    case BOSS_ANIM_DEATH:  curBossAnim=&bossAnim.death;  break;
+                    default:               curBossAnim=&bossAnim.idle;   break;
+                }
+                if(curBossAnim->count>0)
+                {
+                    int bf=boss.currentFrame%curBossAnim->count;
+                    Texture2D btex=curBossAnim->frames[bf];
+                    if(btex.id!=0)
+                    {
+                        Color bossTint=(boss.animState==BOSS_ANIM_HIT)?RED:WHITE;
+                        float srcW=(BOSS_SPRITE_DEFAULT_FACES_RIGHT==boss.facingRight)?(float)btex.width:-(float)btex.width;
+                        Rectangle bsrc={0.0f,0.0f,srcW,(float)btex.height};
+                        float rw=btex.width*BOSS_SPRITE_SCALE;
+                        float rh=btex.height*BOSS_SPRITE_SCALE;
+                        //anchor by center-x + bottom against boss.rec instead of the left edge - this pack's
+                        //frames aren't all the same canvas size (cleave is wider to fit the weapon swing), so
+                        //anchoring by the left edge made the demon visually drift away from its own hitbox
+                        float bossCenterX=boss.rec.x+boss.rec.width/2.0f;
+                        Rectangle bdest={ bossCenterX-rw/2.0f+BOSS_SPRITE_OFFSET_X, boss.rec.y+boss.rec.height-rh+BOSS_SPRITE_OFFSET_Y, rw, rh };
+                        DrawTexturePro(btex,bsrc,bdest,(Vector2){0,0},0.0f,bossTint);
+                    }
+                }
+                //boss health bar
+                float barW=300.0f, barH=20.0f;
+                float barX=screenWidth/2.0f-barW/2.0f, barY=20.0f;
+                DrawRectangle((int)barX,(int)barY,(int)barW,(int)barH,DARKGRAY);
+                float healthRatio=(float)boss.health/(float)BOSS_MAX_HEALTH;
+                if(healthRatio<0.0f) healthRatio=0.0f;
+                DrawRectangle((int)barX,(int)barY,(int)(barW*healthRatio),(int)barH,RED);
+                DrawRectangleLines((int)barX,(int)barY,(int)barW,(int)barH,WHITE);
+                DrawTextEx(myfont,"DEMON",(Vector2){barX,barY-26},20,2,GOLD);
+            }
+
+            //--- hitbox visualization: T toggles this on/off ---
+            if(showHitboxes)
+            {
+                Rectangle playerCollisionRecDraw = {
+                    player.rec.x + PLAYER_OFFSET_X,
+                    player.rec.y + PLAYER_OFFSET_Y,
+                    PLAYER_COLLISION_WIDTH,
+                    PLAYER_COLLISION_HEIGHT
+                };
+                DrawRectangleLines((int)playerCollisionRecDraw.x,(int)playerCollisionRecDraw.y,(int)playerCollisionRecDraw.width,(int)playerCollisionRecDraw.height,GREEN);
+
+                if(isAttacking)
+                {
+                    float attackRangeDraw=70.0f;
+                    Rectangle attackBoxDraw=facingRight?
+                        (Rectangle){ playerCollisionRecDraw.x+playerCollisionRecDraw.width+PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRecDraw.y, attackRangeDraw, playerCollisionRecDraw.height }
+                        :(Rectangle){ playerCollisionRecDraw.x-attackRangeDraw-PLAYER_ATTACK_FORWARD_OFFSET, playerCollisionRecDraw.y, attackRangeDraw, playerCollisionRecDraw.height };
+                    DrawRectangleLines((int)attackBoxDraw.x,(int)attackBoxDraw.y,(int)attackBoxDraw.width,(int)attackBoxDraw.height,YELLOW);
+                }
+
+                for(int i=0;i<activeEnemyCount;i++)
+                {
+                    if(!enemies[i].active) continue;
+                    Rectangle enemyCollisionRecDraw = {
+                        enemies[i].rec.x + ENEMY_OFFSET_X,
+                        enemies[i].rec.y + ENEMY_COLLISION_OFFSET_Y,
+                        ENEMY_COLLISION_WIDTH,
+                        ENEMY_COLLISION_HEIGHT
+                    };
+                    DrawRectangleLines((int)enemyCollisionRecDraw.x,(int)enemyCollisionRecDraw.y,(int)enemyCollisionRecDraw.width,(int)enemyCollisionRecDraw.height,ORANGE);
+                }
+
+                if(currentLevel==BOSS_LEVEL&&boss.active)
+                {
+                    DrawRectangleLines((int)boss.rec.x,(int)boss.rec.y,(int)boss.rec.width,(int)boss.rec.height,SKYBLUE); //boss.rec itself (the positioning anchor)
+
+                    Rectangle bossCollisionRecDraw = boss.facingRight?
+                        (Rectangle){ boss.rec.x+BOSS_OFFSET_X, boss.rec.y+BOSS_COLLISION_OFFSET_Y, BOSS_COLLISION_WIDTH, BOSS_COLLISION_HEIGHT }
+                        :(Rectangle){ boss.rec.x+boss.rec.width-BOSS_OFFSET_X-BOSS_COLLISION_WIDTH, boss.rec.y+BOSS_COLLISION_OFFSET_Y, BOSS_COLLISION_WIDTH, BOSS_COLLISION_HEIGHT };
+                    DrawRectangleLines((int)bossCollisionRecDraw.x,(int)bossCollisionRecDraw.y,(int)bossCollisionRecDraw.width,(int)bossCollisionRecDraw.height,LIME);
+
+                    if(boss.animState==BOSS_ANIM_CLEAVE)
+                    {
+                        float curBossAttackRangeBoxDraw=BOSS_ATTACK_RANGE_BOX_BASE+bossRangeBonus[selectedDifficulty];
+                        Rectangle bossAttackBoxDraw=boss.facingRight?
+                            (Rectangle){ boss.rec.x+boss.rec.width+BOSS_ATTACK_FORWARD_OFFSET, boss.rec.y, curBossAttackRangeBoxDraw, boss.rec.height }
+                            :(Rectangle){ boss.rec.x-curBossAttackRangeBoxDraw-BOSS_ATTACK_FORWARD_OFFSET, boss.rec.y, curBossAttackRangeBoxDraw, boss.rec.height };
+                        DrawRectangleLines((int)bossAttackBoxDraw.x,(int)bossAttackBoxDraw.y,(int)bossAttackBoxDraw.width,(int)bossAttackBoxDraw.height,MAGENTA);
                     }
                 }
             }
-                    Rectangle playerCollisionRecDraw = {
-                        player.rec.x + PLAYER_OFFSET_X,
-                        player.rec.y + PLAYER_OFFSET_Y,
-                        PLAYER_COLLISION_WIDTH,
-                        PLAYER_COLLISION_HEIGHT
-                    };
-                    for(int i=0;i<activeEnemyCount;i++)
-                    {
-                        if(!enemies[i].active) continue;
-                        Rectangle enemyCollisionRecDraw = {
-                            enemies[i].rec.x + ENEMY_OFFSET_X,
-                            enemies[i].rec.y + ENEMY_COLLISION_OFFSET_Y,
-                            ENEMY_COLLISION_WIDTH,
-                            ENEMY_COLLISION_HEIGHT
-                        };
-                    }
+            DrawText(showHitboxes?"Hitboxes: ON (T)":"Hitboxes: OFF (T)", 10, 590, 14, showHitboxes?LIME:GRAY);
 
-            DrawTextEx(myfont,TextFormat("LEVEL %d/3",currentLevel),(Vector2){10,10},22,2,YELLOW);
+            DrawTextEx(myfont,TextFormat("LEVEL %d/%d",currentLevel,MAX_LEVEL),(Vector2){10,10},22,2,YELLOW);
             DrawTextEx(myfont,TextFormat("SCORE: %d",score),(Vector2){10,90},22,2,YELLOW);
             for(int i=0;i<maxPlayerHealth;i++)
             {
@@ -983,6 +1308,12 @@ int main()
             {
                 DrawTextEx(myfont,"GAME OVER!!! Press R to go back",(Vector2){screenWidth/2-200,screenHeight/2},28,2,RED);
             }
+
+            //--- TEMP DEBUG: remove once the boss is confirmed visible - id==0 means that file failed to load ---
+            DrawText(TextFormat("boss idle[0]=%d cleave[0]=%d hit[0]=%d death[0]=%d",
+                bossAnim.idle.frames[0].id, bossAnim.cleave.frames[0].id,
+                bossAnim.hit.frames[0].id, bossAnim.death.frames[0].id), 10, 570, 14, LIME);
+            //--- END TEMP DEBUG ---
         }
         else if(currentState==STATE_INSTRUCTIONS)
         {
@@ -991,20 +1322,21 @@ int main()
             DrawTextEx(myfont,"Move: A/D or Arrow Keys",(Vector2){200, 220},22,2,RAYWHITE);
             DrawTextEx(myfont,"Jump: SPACE or W (double jump available)",(Vector2){200,255},22,2, RAYWHITE);
             DrawTextEx(myfont,"Dash: LEFT SHIFT or RIGHT SHIFT", (Vector2){200, 290}, 22,2, RAYWHITE);
-            DrawTextEx(myfont,"Attack 1: J or LEFT MOUSE BUTTON", (Vector2){200, 325}, 22,2, RAYWHITE);
-            DrawTextEx(myfont,"Attack 2: RIGHT MOUSE BUTTON",(Vector2) {200, 360}, 22,2, RAYWHITE);
-            DrawTextEx(myfont,"Defeat all enemies to clear each level!", (Vector2){200, 410}, 22,2, YELLOW);
-            DrawTextEx(myfont,"Press ESC to return to menu", (Vector2){screenWidth/2-170, screenHeight-60}, 20,2, GRAY);
+            DrawTextEx(myfont,"Attack 1: Q or LEFT MOUSE BUTTON", (Vector2){200, 325}, 22,2, RAYWHITE);
+            DrawTextEx(myfont,"Attack 2: E or RIGHT MOUSE BUTTON",(Vector2) {200, 360}, 22,2, RAYWHITE);
+            DrawTextEx(myfont,"Defeat all enemies in each room to advance!", (Vector2){200, 410}, 22,2, YELLOW);
+            DrawTextEx(myfont,"Room 6: a demon boss awaits - dodge its cleave and strike back!", (Vector2){200, 440}, 20,2, YELLOW);
+            DrawTextEx(myfont,"Press ESC to return to menu", (Vector2){screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
         }
         else if(currentState==STATE_CREDITS)
         {
             DrawTexture(menubg,0,0,WHITE);
             DrawTextEx(myfont,"Credits",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Credits",60,2).x/2,100},60,2,(Color){48,120,148,255});
-            DrawTextEx(myfont,"Game design & programming:DANIEL & FATIN", (Vector2){250, 230}, 30,2, (Color){230,157,153,255});
-            DrawTextEx(myfont,"Music: Hollow Knight OST - Sealed Vessel", (Vector2){250, 265}, 30,2, (Color){230,157,153,255});
-            DrawTextEx(myfont,"Sprites: Craftpix & Itch.io and other open sources",(Vector2) {250, 300}, 30,2, (Color){230,157,153,255});
-            DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){230,157,153,255});
-            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-170, screenHeight-60}, 20,2, GRAY);
+            DrawTextEx(myfont,"Game design & programming:DANIEL & FATIN", (Vector2){250, 230}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Music: Hollow Knight OST - Sealed Vessel", (Vector2){250, 265}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Sprites: Craftpix & Itch.io and other open sources",(Vector2) {250, 300}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
         }
         else if(currentState==STATE_DIFFICULTY)
         {
@@ -1037,7 +1369,7 @@ int main()
                         (Vector2){screenWidth/2-180,230+i*45},28,2,RAYWHITE);
                 }
             }
-            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2){screenWidth/2-170,screenHeight-60},20,2,GRAY);
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2){screenWidth/2-220,screenHeight-60},20,2,GRAY);
         }
         else if(currentState==STATE_NAME_ENTRY)
         {
@@ -1047,22 +1379,22 @@ int main()
             DrawRectangleRec(nameBox,(Color){30,30,40,255});
             DrawRectangleLinesEx(nameBox,2,SKYBLUE);
             DrawTextEx(myfont,playerName,(Vector2){nameBox.x+10,nameBox.y+8},30,2,WHITE);
-            if(((int)(GetTime()*2)%2)==0)  
+            if(((int)(GetTime()*2)%2)==0)   // blinking cursor
             {
                 float cursorX=nameBox.x+10+MeasureTextEx(myfont,playerName,30,2).x+4;
                 DrawTextEx(myfont,"|",(Vector2){cursorX,nameBox.y+8},30,2,WHITE);
             }
-            DrawTextEx(myfont,"Press ENTER to continue",(Vector2){screenWidth/2-130,340},20,2,GRAY);
-            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-130,screenHeight-60},20,2,GRAY);
+            DrawTextEx(myfont,"Press ENTER to continue",(Vector2){screenWidth/2-180,340},20,2,GRAY);
+            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-180,screenHeight-60},20,2,GRAY);
         }
         else if(currentState==STATE_VICTORY)
         {
-            const char*winText="VICTORY! YOU CLEARED ALL 3 LEVELS!";
+            const char*winText="VICTORY! THE DEMON HAS FALLEN!";
             int winWidth=MeasureText(winText,32);
-            DrawTextEx(myfont,winText,(Vector2){(screenWidth-winWidth)/2,220},32,2,GOLD);
-            const char*subText="Press ENTER or R to go back";
+            DrawText(winText,(screenWidth-winWidth)/2,220,32,GOLD);
+            const char*subText="Press ENTER or R to Play Again";
             int subWidth=MeasureText(subText,20);
-            DrawTextEx(myfont,subText,(Vector2){(screenWidth-subWidth)/2,300},20,2,RAYWHITE);
+            DrawText(subText,(screenWidth-subWidth)/2,300,20,RAYWHITE);
             const char*scoreText=TextFormat("Final Score: %d",score);
             int scoreWidth=MeasureText(scoreText,24);
             DrawTextEx(myfont,scoreText,(Vector2){(screenWidth-scoreWidth)/2,340},24,2,YELLOW);
@@ -1073,6 +1405,9 @@ int main()
     UnloadTexture(bgTextureLvl1);
     UnloadTexture(bgTextureLvl2);
     UnloadTexture(bgTextureLvl3);
+    UnloadTexture(bgTextureLvl4);
+    UnloadTexture(bgTextureLvl5);
+    UnloadTexture(bgTextureBoss);
 
     UnloadTexture(playerAnim.idle);
     UnloadTexture(playerAnim.run);
@@ -1090,16 +1425,22 @@ int main()
     UnloadTexture(goblinAnim.attack);
     UnloadTexture(goblinAnim.death);
 
+    for(int i=0;i<bossAnim.idle.count;i++)   UnloadTexture(bossAnim.idle.frames[i]);
+    for(int i=0;i<bossAnim.cleave.count;i++) UnloadTexture(bossAnim.cleave.frames[i]);
+    for(int i=0;i<bossAnim.hit.count;i++)    UnloadTexture(bossAnim.hit.frames[i]);
+    for(int i=0;i<bossAnim.death.count;i++)  UnloadTexture(bossAnim.death.frames[i]);
+
     CloseWindow();
     return 0;
 }
 
-void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW,int enemyHealth)
+void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW, Difficulty difficulty)
 {
     *activeCount=6+(level-1)*2;
-    if(*activeCount>ABSOLUTE_MAX_ENEMIES)*activeCount=ABSOLUTE_MAX_ENEMIES;
+    int maxForDifficulty=difficultyMaxEnemies[difficulty];
+    if(*activeCount>maxForDifficulty)*activeCount=maxForDifficulty;
+    if(*activeCount>ABSOLUTE_MAX_ENEMIES)*activeCount=ABSOLUTE_MAX_ENEMIES; //hard safety cap on the array itself
     float speedBoost=(level-1)*30.0f;
-    int scaledHealth=enemyHealth+(level-1);
     float zoneMinX[3]={ 300.0f, 600.0f, 900.0f }; //enemy er norar jayga
     float zoneMaxX[3]={ 500.0f, 800.0f, 1150.0f };
     for(int i=0; i<*activeCount; i++)
@@ -1110,7 +1451,7 @@ void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groun
         float spawnOffset=(i/3)*60.0f;
         float startX=minX+20.0f+spawnOffset;
         if(startX>maxX-64.0f) startX=maxX-64.0f;
-        float enemySpeed=(100.0f+speedBoost)+((i%2)*20.0f);
+        float enemySpeed=((100.0f+speedBoost)+((i%2)*20.0f))*enemySpeedMultiplier[difficulty];
         bool startFacingRight=(i%2==0);
         enemies[i]=(Enemy){(Rectangle){ startX, groundLevel-64.0f, 64.0f, 64.0f },
             enemySpeed,
@@ -1120,10 +1461,33 @@ void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groun
             maxX,
             ENEMY_ANIM_RUN,
             0,
-            0.0f,
-            scaledHealth,
-            scaledHealth
+            0.0f
         };
     }
     (void)screenW; //currently unused, kept for future spawn logic that scales with screen width
+}
+
+void SpawnBoss(Boss *boss, float groundLevel, int screenW)
+{
+    //centered horizontally in the room, as requested
+    boss->rec=(Rectangle){ (float)screenW/2.0f-BOSS_REC_WIDTH/2.0f, groundLevel-BOSS_REC_HEIGHT, BOSS_REC_WIDTH, BOSS_REC_HEIGHT };
+    boss->active=true;
+    boss->health=BOSS_MAX_HEALTH;
+    boss->facingRight=false; //the player enters from the left, so the boss starts facing left toward them
+    boss->animState=BOSS_ANIM_IDLE;
+    boss->currentFrame=0;
+    boss->frameTimer=0.0f;
+    boss->attackCooldownTimer=0.0f;
+}
+
+void LoadAnimFrames(AnimFrames *anim, const char *folder, const char *prefix, int count)
+{
+    if(count>MAX_ANIM_FRAMES) count=MAX_ANIM_FRAMES; //safety clamp
+    anim->count=count;
+    for(int i=1;i<=count;i++)
+    {
+        char path[256];
+        snprintf(path,sizeof(path),"assets/demon/%s/%s_%d.png",folder,prefix,i);
+        anim->frames[i-1]=LoadTexture(path);
+    }
 }
