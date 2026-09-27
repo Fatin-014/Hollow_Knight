@@ -2,7 +2,9 @@
 #include "raymath.h"
 #include <math.h>
 #include<stddef.h>
+#include<stdio.h>
 
+#define MAX_NAME_LEN 16
 #define ABSOLUTE_MAX_ENEMIES 12
 #define screenWidth 1280
 #define screenHeight 600
@@ -46,8 +48,13 @@ typedef enum GameState
     STATE_VICTORY,
     STATE_INSTRUCTIONS,
     STATE_CREDITS,
-    STATE_DIFFICULTY
+    STATE_DIFFICULTY,
+    STATE_NAME_ENTRY,
+    STATE_HIGHSCORES
 } GameState;
+char playerName[MAX_NAME_LEN+1]="";
+int nameLetterCount=0;
+bool scoreSaved=false;
 typedef enum Difficulty
 {
     DIFF_EASY,
@@ -122,6 +129,50 @@ typedef struct Player
 } Player;
 
 void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW);
+
+typedef struct HighScoreEntry
+{
+    char name[MAX_NAME_LEN+1];
+    int score;
+} HighScoreEntry;
+
+void SaveScore(const char* name, int score)
+{
+    FILE *f=fopen("highscores.txt","a");
+    if(f!=NULL)
+    {
+        fprintf(f,"%s,%d\n",name,score);
+        fclose(f);
+    }
+}
+
+int LoadTopScores(HighScoreEntry *outEntries, int maxEntries)
+{
+    FILE *f=fopen("highscores.txt","r");
+    if(f==NULL) return 0;
+    HighScoreEntry temp[256];
+    int count=0;
+    while(count<256&&fscanf(f,"%16[^,],%d\n",temp[count].name,&temp[count].score)==2)
+    {
+        count++;
+    }
+    fclose(f);
+    for(int i=0;i<count-1;i++)         
+    {
+        for(int j=0;j<count-1-i;j++)
+        {
+            if(temp[j].score<temp[j+1].score)
+            {
+                HighScoreEntry tmp=temp[j];
+                temp[j]=temp[j+1];
+                temp[j+1]=tmp;
+            }
+        }
+    }
+    int n=(count<maxEntries)?count:maxEntries;
+    for(int i=0;i<n;i++) outEntries[i]=temp[i];
+    return n;
+}
 
 int main()
 {
@@ -219,7 +270,9 @@ int main()
     char* easy="EASY";
     char* medium="MEDIUM";
     char* hard="HARD";
+    char* highscores="High Scores";
 
+    Vector2 sizeHighscores=MeasureTextEx(myfont,highscores,40,2);
     Vector2 sizeStart=MeasureTextEx(myfont,start,40,2);
     Vector2 sizeExit=MeasureTextEx(myfont,exit,40,2);
     Vector2 sizeinstructions=MeasureTextEx(myfont,instruction,40,2);
@@ -228,6 +281,7 @@ int main()
     Vector2 sizeMedium=MeasureTextEx(myfont,medium,40,2);
     Vector2 sizeHard=MeasureTextEx(myfont,hard,40,2);
     
+    Rectangle highscorebtn={screenWidth/2-sizeHighscores.x/2,500,sizeHighscores.x,sizeHighscores.y};
     Rectangle easybtn={screenWidth/2-sizeEasy.x/2,250,sizeEasy.x,sizeEasy.y};
     Rectangle mediumbtn={screenWidth/2-sizeMedium.x/2,320,sizeMedium.x,sizeMedium.y};
     Rectangle hardbtn={screenWidth/2-sizeHard.x/2,390,sizeHard.x,sizeHard.y};
@@ -252,7 +306,7 @@ int main()
             if(CheckCollisionPointRec(mousepos,startbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 PlaySound(clicksound);
-                currentState=STATE_DIFFICULTY;
+                currentState=STATE_NAME_ENTRY;
             }
             if(CheckCollisionPointRec(mousepos,exitbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
@@ -274,6 +328,46 @@ int main()
                 soundOn=!soundOn;
                 SetMasterVolume(soundOn?1:0);
                 if(soundOn) PlaySound(clicksound);
+            }
+            if(CheckCollisionPointRec(mousepos,highscorebtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySound(clicksound);
+                currentState=STATE_HIGHSCORES;
+            }
+        }
+        else if(currentState==STATE_HIGHSCORES)
+        {
+            if(IsKeyPressed(KEY_ESCAPE))
+            {
+                currentState=STATE_MENU;
+            }
+        }
+        else if(currentState==STATE_NAME_ENTRY)
+        {
+            int key=GetCharPressed();
+            while(key>0)
+            {
+                if((key>=32)&&(key<=125)&&nameLetterCount<MAX_NAME_LEN)
+                {
+                    playerName[nameLetterCount]=(char)key;
+                    playerName[nameLetterCount+1]='\0';
+                    nameLetterCount++;
+                }
+                key=GetCharPressed();
+            }
+            if(IsKeyPressed(KEY_BACKSPACE)&&nameLetterCount>0)
+            {
+                nameLetterCount--;
+                playerName[nameLetterCount]='\0';
+            }
+            if(IsKeyPressed(KEY_ENTER)&&nameLetterCount>0)
+            {
+                PlaySound(clicksound);
+                currentState=STATE_DIFFICULTY;
+            }
+            if(IsKeyPressed(KEY_ESCAPE))
+            {
+                currentState=STATE_MENU;
             }
         }
         else if(currentState==STATE_INSTRUCTIONS)
@@ -329,6 +423,11 @@ int main()
                     playerAnimState=PLAYER_ANIM_DEATH;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
+                    if(!scoreSaved)
+                    { 
+                        SaveScore(playerName,score); 
+                        scoreSaved=true; 
+                    }
                 }
                 //keep the death animation playing (holds on its last frame) while we wait for a restart
                 playerFrameTimer+=deltaTime;
@@ -353,10 +452,15 @@ int main()
                     isHurt=false;
                     hurtTimer=0.0f;
                     deathAnimStarted=false;
+                    scoreSaved=false;
+                    score=0;               
+                    playerName[0]='\0';     
+                    nameLetterCount=0;               
                     playerAnimState=PLAYER_ANIM_IDLE;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
                     SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth);
+                    currentState=STATE_MENU;
                 }
             }
             else
@@ -665,6 +769,11 @@ int main()
                     if(currentLevel>=3)
                     {
                         score+=(int)(100*difficultyScoreMultiplier[selectedDifficulty]);
+                        if(!scoreSaved)
+                        {
+                            SaveScore(playerName,score);
+                            scoreSaved=true;
+                        }
                         currentState=STATE_VICTORY;
                     }
                     else
@@ -696,6 +805,9 @@ int main()
                 isHurt=false;
                 hurtTimer=0.0f;
                 deathAnimStarted=false;
+                scoreSaved=false;               
+                playerName[0]='\0';     
+                nameLetterCount=0;  
                 playerAnimState=PLAYER_ANIM_IDLE;
                 playerFrame=0;
                 playerFrameTimer=0.0f;
@@ -720,6 +832,8 @@ int main()
             DrawTextEx(myfont,credits,(Vector2){creditbtn.x,creditbtn.y},40,2,colcred);
             Color colsound=CheckCollisionPointRec(mousepos,soundbtn)?GREEN:RED;
             DrawTextEx(myfont,soundLabel,(Vector2){soundbtn.x,soundbtn.y},40,2,colsound);
+            Color colhighscore=CheckCollisionPointRec(mousepos,highscorebtn)?GREEN:RED;
+            DrawTextEx(myfont,highscores,(Vector2){highscorebtn.x,highscorebtn.y},40,2,colhighscore);
         }
         else if(currentState==STATE_GAMEPLAY)
         {
@@ -824,7 +938,7 @@ int main()
             }
             if(playerHealth<=0)
             {
-                DrawTextEx(myfont,"GAME OVER!!Press R to Restart",(Vector2){screenWidth/2-200,screenHeight/2},28,2,RED);
+                DrawTextEx(myfont,"GAME OVER!!! Press R to go back",(Vector2){screenWidth/2-200,screenHeight/2},28,2,RED);
             }
         }
         else if(currentState==STATE_INSTRUCTIONS)
@@ -860,6 +974,43 @@ int main()
             Color colHard=CheckCollisionPointRec(mousepos,hardbtn)?GREEN:RED;
             DrawTextEx(myfont,hard,(Vector2){hardbtn.x,hardbtn.y},40,2,colHard);
             DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-130,screenHeight-60},20,2,GRAY);
+        }
+        else if(currentState=STATE_HIGHSCORES)
+        {
+            DrawTexture(menubg,0,0,WHITE);
+            DrawTextEx(myfont,"High Scores",(Vector2){screenWidth/2-MeasureTextEx(myfont,"High Scores",60,2).x/2,100},60,2,(Color){48,120,148,255});
+
+            HighScoreEntry topScores[5];
+            int topCount=LoadTopScores(topScores,5);
+            if(topCount==0)
+            {
+                DrawTextEx(myfont,"No scores yet - play a game!",(Vector2){screenWidth/2-220,250},24,2,GRAY);
+            }
+            else
+            {
+                for(int i=0;i<topCount;i++)
+                {
+                    DrawTextEx(myfont,TextFormat("%d. %s - %d",i+1,topScores[i].name,topScores[i].score),
+                        (Vector2){screenWidth/2-180,230+i*45},28,2,RAYWHITE);
+                }
+            }
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2){screenWidth/2-220,screenHeight-60},20,2,GRAY);
+        }
+        else if(currentState==STATE_NAME_ENTRY)
+        {
+            DrawTexture(menubg,0,0,WHITE);
+            DrawTextEx(myfont,"Enter Your Name",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Enter Your Name",60,2).x/2,120},60,2,(Color){48,120,148,255});
+            Rectangle nameBox={screenWidth/2-200,260,400,50};
+            DrawRectangleRec(nameBox,(Color){30,30,40,255});
+            DrawRectangleLinesEx(nameBox,2,SKYBLUE);
+            DrawTextEx(myfont,playerName,(Vector2){nameBox.x+10,nameBox.y+8},30,2,WHITE);
+            if(((int)(GetTime()*2)%2)==0)   // blinking cursor
+            {
+                float cursorX=nameBox.x+10+MeasureTextEx(myfont,playerName,30,2).x+4;
+                DrawTextEx(myfont,"|",(Vector2){cursorX,nameBox.y+8},30,2,WHITE);
+            }
+            DrawTextEx(myfont,"Press ENTER to continue",(Vector2){screenWidth/2-180,340},20,2,GRAY);
+            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-180,screenHeight-60},20,2,GRAY);
         }
         else if(currentState==STATE_VICTORY)
         {

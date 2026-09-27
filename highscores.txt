@@ -1,0 +1,3 @@
+fatin,0
+fatin,40
+fatin,20
