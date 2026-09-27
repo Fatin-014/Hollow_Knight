@@ -7,7 +7,7 @@
 
 #define LEVEL_INTRO_DURATION 2.0f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 1
+#define ABSOLUTE_MAX_ENEMIES 12
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
@@ -54,8 +54,6 @@
 #define BOSS_ATTACK_COOLDOWN_BASE 1.0f     //time after a swing before the boss can attack again, before difficulty speed-up
 #define BOSS_HIT_START_FRAME 6             //frame range of demon_cleave that can actually hit the player
 #define BOSS_HIT_END_FRAME 9
-//NOTE: these collision/offset/scale numbers are guesses since the real sprite pixel sizes aren't known -
-//run the game and adjust these until the boss's hitbox and sprite line up with what's on screen.
 #define BOSS_COLLISION_WIDTH 70.0f
 #define BOSS_COLLISION_HEIGHT 130.0f
 #define BOSS_OFFSET_X 40.0f
@@ -63,9 +61,6 @@
 #define BOSS_ATTACK_FORWARD_OFFSET 0.0f
 #define BOSS_ATTACK_RANGE_BOX_BASE 90.0f   //actual reach of the boss's swing, before difficulty bonus
 #define BOSS_SPRITE_SCALE 2.5f
-//if the boss still visually faces the wrong way even though boss.facingRight is now correctly driven by
-//the player's relative position, it means the raw demon PNGs default to facing the opposite direction than
-//assumed here - flip this one value (true<->false) rather than touching the facing logic itself
 #define BOSS_SPRITE_DEFAULT_FACES_RIGHT false
 #define BOSS_SPRITE_OFFSET_X 0.0f
 #define BOSS_SPRITE_OFFSET_Y 0.0f
