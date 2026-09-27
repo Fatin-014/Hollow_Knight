@@ -14,3 +14,4 @@ fatin,40
 fatin,60
 fatin,260
 fatin,240
+fatin,0

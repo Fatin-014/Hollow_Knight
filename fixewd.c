@@ -4,6 +4,7 @@
 #include<stddef.h>
 #include<stdio.h>
 
+#define LEVEL_INTRO_DURATION 2.0f
 #define MAX_NAME_LEN 16
 #define ABSOLUTE_MAX_ENEMIES 12
 #define screenWidth 1280
@@ -188,7 +189,7 @@ int main()
     float verticalVelocity=0.0f;
     bool isGrounded=true;
     Player player={0};
-    player.rec=(Rectangle){100.0f, GROUND_LEVEL-64.0f, 64.0f, 64.0f};
+    player.rec=(Rectangle){75.0f, GROUND_LEVEL-64.0f, 64.0f, 64.0f};
 
     int playerHealth=5;
     int score=0;
@@ -221,6 +222,9 @@ int main()
 
     //death
     bool deathAnimStarted=false;
+    //levelintro
+    bool showLevelIntro=false;
+    float levelIntroTimer=0;
 
     int jumpcount=0;
 
@@ -468,6 +472,16 @@ int main()
             }
             else
             {
+                if(showLevelIntro)
+                {
+                    levelIntroTimer-=deltaTime;
+                    if(levelIntroTimer<=0)
+                    {
+                        showLevelIntro=false;
+                    }
+                }
+                else
+                {
                 if(isInvincible)
                 {
                     invincibilityTimer-=deltaTime;
@@ -800,6 +814,7 @@ int main()
                         SpawnLevelEnemies(enemies, currentLevel,&activeEnemyCount,GROUND_LEVEL,screenWidth,difficultyEnemyHealth[selectedDifficulty]);
                     }
                 }
+            }
             }
         }
         else if(currentState==STATE_VICTORY)
