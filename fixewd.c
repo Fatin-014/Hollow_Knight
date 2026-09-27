@@ -29,7 +29,7 @@
 #define ENEMY_COLLISION_HEIGHT 75.0f
 #define ENEMY_OFFSET_X 15.0f
 #define ENEMY_COLLISION_OFFSET_Y 10.0f
-#define PLAYER_ATTACK_FORWARD_OFFSET -20.0f
+#define PLAYER_ATTACK_FORWARD_OFFSET -15.0f
 #define ATTACK1_HIT_START_FRAME 3
 #define ATTACK1_HIT_END_FRAME 5
 #define ATTACK2_HIT_START_FRAME 4
@@ -42,7 +42,9 @@ typedef enum GameState
 {
     STATE_MENU,
     STATE_GAMEPLAY,
-    STATE_VICTORY
+    STATE_VICTORY,
+    STATE_INSTRUCTIONS,
+    STATE_CREDITS
 } GameState;
 
 typedef enum EnemyAnimState
@@ -114,6 +116,7 @@ void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groun
 int main()
 {
     InitWindow(screenWidth, screenHeight, "HOLLOW KNIGHT");
+    SetExitKey(KEY_NULL);
     SetTargetFPS(60);
     InitAudioDevice();
     GameState currentState=STATE_MENU;
@@ -232,6 +235,30 @@ int main()
             {
                 PlaySound(clicksound);
                 break;
+            }
+            if(CheckCollisionPointRec(mousepos,instrbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySound(clicksound);
+                currentState=STATE_INSTRUCTIONS;
+            }
+            if(CheckCollisionPointRec(mousepos,creditbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySound(clicksound);
+                currentState=STATE_CREDITS;
+            }
+        }
+        else if(currentState==STATE_INSTRUCTIONS)
+        {
+            if(IsKeyPressed(KEY_ESCAPE))
+            {
+                currentState=STATE_MENU;
+            }
+        }
+        else if(currentState==STATE_CREDITS)
+        {
+            if(IsKeyPressed(KEY_ESCAPE))
+            {
+                currentState=STATE_MENU;
             }
         }
         else if(currentState==STATE_GAMEPLAY)
@@ -698,8 +725,6 @@ int main()
                     DrawTexturePro(tex,src,dest,(Vector2){0, 0},0.0f,WHITE);
                 }
             }
-            //
-            // --- TEMP DEBUG: hitbox outlines, remove once aligned ---
                     Rectangle playerCollisionRecDraw = {
                         player.rec.x + PLAYER_OFFSET_X,
                         player.rec.y + PLAYER_OFFSET_Y,
@@ -717,8 +742,6 @@ int main()
                         };
                     }
 
-            // --- END TEMP DEBUG ---
-            //
             DrawText(TextFormat("LEVEL %d/3",currentLevel),10,10,22,YELLOW);
             for(int i=0;i<maxPlayerHealth;i++)
             {
@@ -738,6 +761,28 @@ int main()
             {
                 DrawText("GAME OVER!!Press R to Restart",screenWidth/2-200,screenHeight/2,28,RED);
             }
+        }
+        else if(currentState==STATE_INSTRUCTIONS)
+        {
+            DrawTexture(menubg,0,0,WHITE);
+            DrawTextEx(myfont,"Instructions",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Instructions",60,2).x/2,100},60,2,(Color){48,120,148,255});
+            DrawTextEx(myfont,"Move: A/D or Arrow Keys",(Vector2){200, 220},22,2,RAYWHITE);
+            DrawTextEx(myfont,"Jump: SPACE or W (double jump available)",(Vector2){200,255},22,2, RAYWHITE);
+            DrawTextEx(myfont,"Dash: LEFT SHIFT or RIGHT SHIFT", (Vector2){200, 290}, 22,2, RAYWHITE);
+            DrawTextEx(myfont,"Attack 1: J or LEFT MOUSE BUTTON", (Vector2){200, 325}, 22,2, RAYWHITE);
+            DrawTextEx(myfont,"Attack 2: RIGHT MOUSE BUTTON",(Vector2) {200, 360}, 22,2, RAYWHITE);
+            DrawTextEx(myfont,"Defeat all enemies to clear each level!", (Vector2){200, 410}, 22,2, YELLOW);
+            DrawTextEx(myfont,"Press ESC to return to menu", (Vector2){screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
+        }
+        else if(currentState==STATE_CREDITS)
+        {
+            DrawTexture(menubg,0,0,WHITE);
+            DrawTextEx(myfont,"Credits",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Credits",60,2).x/2,100},60,2,(Color){48,120,148,255});
+            DrawTextEx(myfont,"Game design & programming:DANIEL & FATIN", (Vector2){250, 230}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Music: Hollow Knight OST - Sealed Vessel", (Vector2){250, 265}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Sprites: Craftpix & Itch.io and other open sources",(Vector2) {250, 300}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){125,18,44,255});
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
         }
         else if(currentState==STATE_VICTORY)
         {
