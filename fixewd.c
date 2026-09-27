@@ -99,6 +99,7 @@ typedef struct Enemy
     int currentFrame;
     float frameTimer;
     int health;
+    int maxHealth;
 } Enemy;
 
 //holds each goblin animation strip + how many frames it contains, loaded once and shared by every goblin
@@ -913,6 +914,19 @@ int main()
                     Rectangle src={ frame*frameW, 0.0f, srcW, frameH };
                     Rectangle dest={ enemies[i].rec.x, enemies[i].rec.y+ENEMY_OFFSET_Y, enemies[i].rec.width, enemies[i].rec.height };
                     DrawTexturePro(tex,src,dest,(Vector2){0, 0},0.0f,WHITE);
+                    if(enemies[i].active&&enemies[i].animState!=ENEMY_ANIM_DEATH&&enemies[i].maxHealth>1)
+                    {
+                        float barWidth=40.0f;
+                        float barHeight=5.0f;
+                        float barX=enemies[i].rec.x+(enemies[i].rec.width-barWidth)/2.0f;
+                        float barY=enemies[i].rec.y+ENEMY_OFFSET_Y-10.0f;
+                        float healthRatio=(float)enemies[i].health/(float)enemies[i].maxHealth;
+                        if(healthRatio<0.0f) healthRatio=0.0f;
+
+                        DrawRectangle(barX,barY,barWidth,barHeight,(Color){40,40,40,255});          // background
+                        DrawRectangle(barX,barY,barWidth*healthRatio,barHeight,RED);                 // fill
+                        DrawRectangleLines(barX,barY,barWidth,barHeight,BLACK);                      // border
+                    }
                 }
             }
                     Rectangle playerCollisionRecDraw = {
@@ -1092,6 +1106,7 @@ void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groun
             ENEMY_ANIM_RUN,
             0,
             0.0f,
+            scaledHealth,
             scaledHealth
         };
     }
