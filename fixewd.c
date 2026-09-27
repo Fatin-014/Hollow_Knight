@@ -7,7 +7,7 @@
 
 #define LEVEL_INTRO_DURATION 2.0f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 12
+#define ABSOLUTE_MAX_ENEMIES 1
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
@@ -89,14 +89,11 @@ typedef enum Difficulty
 }Difficulty;
 
 float difficultyScoreMultiplier[3]={1.0f, 1.5f, 2.0f};
-//how many goblins can be active at once per difficulty (easy/medium/hard)
 int difficultyMaxEnemies[3]={6, 8, 10};
-//enemy movement speed multiplier per difficulty, relative to easy as the 1.0x baseline
 float enemySpeedMultiplier[3]={1.0f, 1.5f, 2.0f};
-//extra pixels added to the boss's attack range (both sides, since the range check is symmetric) per difficulty
 float bossRangeBonus[3]={0.0f, 20.0f, 40.0f};
-//how much faster the boss's swing animation + attack cooldown are per difficulty
 float bossAttackSpeedMultiplier[3]={1.0f, 1.2f, 1.5f};
+int difficultyEnemyHealth[3]={1,2,3};
 
 typedef enum EnemyAnimState
 {
@@ -139,6 +136,8 @@ typedef struct Enemy
     EnemyAnimState animState;
     int currentFrame;
     float frameTimer;
+    int health;
+    int maxHealth;
 } Enemy;
 
 //holds each goblin animation strip + how many frames it contains, loaded once and shared by every goblin
@@ -712,10 +711,14 @@ int main()
                             };
                             if(enemies[i].active&&!alreadyDying&&CheckCollisionRecs(attackBox, enemyCollisionRec))
                             {
+                                enemies[i].health--;
                                 enemies[i].animState=ENEMY_ANIM_HIT;
                                 enemies[i].currentFrame=0;
                                 enemies[i].frameTimer=0.0f;
-                                score+=(int)(10*difficultyScoreMultiplier[selectedDifficulty]);
+                                if(enemies[i].health<=0)
+                                {
+                                    score+=(int)(10*difficultyScoreMultiplier[selectedDifficulty]);
+                                }    
                             }
                         }
                         //same attack box also lands on the boss when we're in the boss room
@@ -769,7 +772,14 @@ int main()
                             e->currentFrame++;
                             if(e->currentFrame>=goblinAnim.hitFrames)
                             {
-                                e->animState=ENEMY_ANIM_DEATH;
+                                if(e->health<=0)
+                                {
+                                    e->animState=ENEMY_ANIM_DEATH;
+                                }
+                                else
+                                {
+                                    e->animState=ENEMY_ANIM_RUN;
+                                }
                                 e->currentFrame=0;
                                 e->frameTimer=0.0f;
                             }
@@ -1183,6 +1193,19 @@ int main()
                     Rectangle src={ frame*frameW, 0.0f, srcW, frameH };
                     Rectangle dest={ enemies[i].rec.x, enemies[i].rec.y+ENEMY_OFFSET_Y, enemies[i].rec.width, enemies[i].rec.height };
                     DrawTexturePro(tex,src,dest,(Vector2){0, 0},0.0f,WHITE);
+                    if(enemies[i].active&&enemies[i].animState!=ENEMY_ANIM_DEATH)
+                    {
+                        float barWidth=40.0f;
+                        float barHeight=5.0f;
+                        float barX=enemies[i].rec.x+(enemies[i].rec.width-barWidth)/2.0f;
+                        float barY=enemies[i].rec.y+ENEMY_OFFSET_Y-10.0f;
+                        float healthRatio=(float)enemies[i].health/(float)enemies[i].maxHealth;
+                        if(healthRatio<0.0f) healthRatio=0.0f;
+
+                        DrawRectangle(barX,barY,barWidth,barHeight,(Color){40,40,40,255});   // background
+                        DrawRectangle(barX,barY,barWidth*healthRatio,barHeight,RED);          // fill
+                        DrawRectangleLines(barX,barY,barWidth,barHeight,BLACK);               // border
+                    }
                 }
             }
 
@@ -1436,6 +1459,7 @@ void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groun
     if(*activeCount>maxForDifficulty)*activeCount=maxForDifficulty;
     if(*activeCount>ABSOLUTE_MAX_ENEMIES)*activeCount=ABSOLUTE_MAX_ENEMIES; //hard safety cap on the array itself
     float speedBoost=(level-1)*30.0f;
+    int scaledHealth=difficultyEnemyHealth[difficulty]+(level-1);
     float zoneMinX[3]={ 300.0f, 600.0f, 900.0f }; //enemy er norar jayga
     float zoneMaxX[3]={ 500.0f, 800.0f, 1150.0f };
     for(int i=0; i<*activeCount; i++)
@@ -1456,7 +1480,9 @@ void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groun
             maxX,
             ENEMY_ANIM_RUN,
             0,
-            0.0f
+            0.0f,
+            scaledHealth,
+            scaledHealth
         };
     }
     (void)screenW; //currently unused, kept for future spawn logic that scales with screen width
