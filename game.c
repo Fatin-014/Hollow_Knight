@@ -381,12 +381,12 @@ int main()
     Vector2 sizeMedium=MeasureTextEx(myfont,medium,40,2);
     Vector2 sizeHard=MeasureTextEx(myfont,hard,40,2);
     
-    Rectangle highscorebtn={screenWidth/2-sizeHighscores.x/2,500,sizeHighscores.x,sizeHighscores.y};
+    Rectangle highscorebtn={screenWidth/2-sizeHighscores.x/2,300,sizeHighscores.x,sizeHighscores.y};
     Rectangle easybtn={screenWidth/2-sizeEasy.x/2,250,sizeEasy.x,sizeEasy.y};
     Rectangle mediumbtn={screenWidth/2-sizeMedium.x/2,320,sizeMedium.x,sizeMedium.y};
     Rectangle hardbtn={screenWidth/2-sizeHard.x/2,390,sizeHard.x,sizeHard.y};
     Rectangle startbtn={screenWidth/2-sizeStart.x/2,250,sizeStart.x,sizeStart.y};
-    Rectangle exitbtn={screenWidth/2-sizeExit.x/2,300,sizeExit.x,sizeExit.y};
+    Rectangle exitbtn={screenWidth/2-sizeExit.x/2,500,sizeExit.x,sizeExit.y};
     Rectangle instrbtn={screenWidth/2-sizeinstructions.x/2,350,sizeinstructions.x,sizeinstructions.y};
     Rectangle creditbtn={screenWidth/2-sizecredits.x/2,400,sizecredits.x,sizecredits.y};
 
@@ -1480,17 +1480,17 @@ if(showLevelIntro)
             DrawTextEx(myfont,"Attack 2: E or RIGHT MOUSE BUTTON",(Vector2) {200, 360}, 22,2, RAYWHITE);
             DrawTextEx(myfont,"Defeat all enemies in each room to advance!", (Vector2){200, 410}, 22,2, YELLOW);
             DrawTextEx(myfont,"Room 6: a demon boss awaits - dodge its cleave and strike back!", (Vector2){200, 440}, 20,2, YELLOW);
-            DrawTextEx(myfont,"Press ESC to return to menu", (Vector2){screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
+            DrawTextEx(myfont,"Press ESC to return to menu", (Vector2){screenWidth/2-130, screenHeight-60}, 20,2, GRAY);
         }
         else if(currentState==STATE_CREDITS)
         {
             DrawTexture(menubg,0,0,WHITE);
             DrawTextEx(myfont,"Credits",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Credits",60,2).x/2,100},60,2,(Color){48,120,148,255});
-            DrawTextEx(myfont,"Game design & programming:DANIEL & FATIN", (Vector2){250, 230}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Music: Hollow Knight OST - Sealed Vessel", (Vector2){250, 265}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Sprites: Craftpix & Itch.io and other open sources",(Vector2) {250, 300}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
+            DrawTextEx(myfont,"Game design & programming:DANIEL & FATIN", (Vector2){250, 230}, 30,2, (Color){120,163,124,255});
+            DrawTextEx(myfont,"Music: Hollow Knight OST - Sealed Vessel", (Vector2){250, 265}, 30,2, (Color){120,163,124,255});
+            DrawTextEx(myfont,"Sprites: Craftpix & Itch.io and other open sources",(Vector2) {250, 300}, 30,2, (Color){120,163,124,255});
+            DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){120,163,124,255});
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-130, screenHeight-60}, 20,2, GRAY);
         }
         else if(currentState==STATE_DIFFICULTY)
         {
@@ -1523,7 +1523,7 @@ if(showLevelIntro)
                         (Vector2){screenWidth/2-180,230+i*45},28,2,RAYWHITE);
                 }
             }
-            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2){screenWidth/2-220,screenHeight-60},20,2,GRAY);
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2){screenWidth/2-170,screenHeight-60},20,2,GRAY);
         }
         else if(currentState==STATE_NAME_ENTRY)
         {
@@ -1538,8 +1538,8 @@ if(showLevelIntro)
                 float cursorX=nameBox.x+10+MeasureTextEx(myfont,playerName,30,2).x+4;
                 DrawTextEx(myfont,"|",(Vector2){cursorX,nameBox.y+8},30,2,WHITE);
             }
-            DrawTextEx(myfont,"Press ENTER to continue",(Vector2){screenWidth/2-180,340},20,2,GRAY);
-            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-180,screenHeight-60},20,2,GRAY);
+            DrawTextEx(myfont,"Press ENTER to continue",(Vector2){screenWidth/2-130,340},20,2,GRAY);
+            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-130,screenHeight-60},20,2,GRAY);
         }
         else if(currentState==STATE_VICTORY)
         {
