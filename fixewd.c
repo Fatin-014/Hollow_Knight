@@ -127,6 +127,7 @@ int main()
     player.rec=(Rectangle){100.0f, GROUND_LEVEL-64.0f, 64.0f, 64.0f};
 
     int playerHealth=5;
+    int score=0;
     const int maxPlayerHealth=5;
     bool isInvincible=false;
     float invincibilityTimer=0.0f;
@@ -164,7 +165,6 @@ int main()
     Enemy enemies[ABSOLUTE_MAX_ENEMIES]={0};
 
     //--- goblin enemy animations ---
-    //fix: copy these from the asset pack into assets/enemies/goblin/ in the project folder
     EnemyAnimSet goblinAnim={0};
     goblinAnim.idle=LoadTexture("assets/enemies/goblin/goblin_idle_anim_strip_4.png");     goblinAnim.idleFrames=4;
     goblinAnim.run=LoadTexture("assets/enemies/goblin/goblin_run_anim_strip_6.png");       goblinAnim.runFrames=6;
@@ -445,6 +445,7 @@ int main()
                                 enemies[i].animState=ENEMY_ANIM_HIT;
                                 enemies[i].currentFrame=0;
                                 enemies[i].frameTimer=0.0f;
+                                score+=10;
                             }
                         }
                     }
@@ -558,7 +559,7 @@ int main()
                         }
                 }
 
-                //pick which player animation should be playing right now
+                //picking which player animation should be playing right now
                 PlayerAnimState newAnimState;
                 if(isAttacking) newAnimState=(currentAttackType==1)?PLAYER_ANIM_ATTACK1:PLAYER_ANIM_ATTACK2;
                 else if(isDashing) newAnimState=PLAYER_ANIM_DASH;
@@ -616,10 +617,12 @@ int main()
                 {
                     if(currentLevel>=3)
                     {
+                        score+=100;
                         currentState=STATE_VICTORY;
                     }
                     else
                     {
+                        score+=50;
                         currentLevel++;
                         player.rec.x=50.0f;
                         if(currentLevel==2&&bgTextureLvl2.id!=0) currentBgTexture=bgTextureLvl2;
