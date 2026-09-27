@@ -5,3 +5,9 @@ fatin,160
 fatin,240
 fatin,260
 fatin,440
+daniel,880
+fatin,280
+fatin,440
+fatin,860
+fatin,220
+fatin,40

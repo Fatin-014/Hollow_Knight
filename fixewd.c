@@ -63,6 +63,7 @@ typedef enum Difficulty
 }Difficulty;
 
 float difficultyScoreMultiplier[3]={1.0f, 1.5f, 2.0f};
+int difficultyEnemyHealth[3]={1,2,4};
 
 typedef enum EnemyAnimState
 {
@@ -97,6 +98,7 @@ typedef struct Enemy
     EnemyAnimState animState;
     int currentFrame;
     float frameTimer;
+    int health;
 } Enemy;
 
 //holds each goblin animation strip + how many frames it contains, loaded once and shared by every goblin
@@ -128,7 +130,7 @@ typedef struct Player
     Rectangle rec;
 } Player;
 
-void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW);
+void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW,int enemyHealth);
 
 typedef struct HighScoreEntry
 {
@@ -291,7 +293,7 @@ int main()
     Rectangle creditbtn={screenWidth/2-sizecredits.x/2,400,sizecredits.x,sizecredits.y};
 
     //level 1 shuru
-    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth);
+    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth,difficultyEnemyHealth[selectedDifficulty]);
 
     while(!WindowShouldClose())
     {
@@ -459,7 +461,7 @@ int main()
                     playerAnimState=PLAYER_ANIM_IDLE;
                     playerFrame=0;
                     playerFrameTimer=0.0f;
-                    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth);
+                    SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth,difficultyEnemyHealth[selectedDifficulty]);
                     currentState=STATE_MENU;
                 }
             }
@@ -593,10 +595,14 @@ int main()
                             };
                             if(enemies[i].active&&!alreadyDying&&CheckCollisionRecs(attackBox, enemyCollisionRec))
                             {
+                               enemies[i].health--;
                                 enemies[i].animState=ENEMY_ANIM_HIT;
                                 enemies[i].currentFrame=0;
                                 enemies[i].frameTimer=0.0f;
+                                if(enemies[i].health<=0)
+                                {
                                 score+=(int)(10*difficultyScoreMultiplier[selectedDifficulty]);
+                                }
                             }
                         }
                     }
@@ -632,7 +638,14 @@ int main()
                             e->currentFrame++;
                             if(e->currentFrame>=goblinAnim.hitFrames)
                             {
+                                if(e->health<=0)
+                                {
                                 e->animState=ENEMY_ANIM_DEATH;
+                                }
+                                else
+                                {
+                                    e->animState=ENEMY_ANIM_RUN;
+                                }
                                 e->currentFrame=0;
                                 e->frameTimer=0.0f;
                             }
@@ -783,7 +796,7 @@ int main()
                         player.rec.x=50.0f;
                         if(currentLevel==2&&bgTextureLvl2.id!=0) currentBgTexture=bgTextureLvl2;
                         else if(currentLevel==3&&bgTextureLvl3.id!=0) currentBgTexture=bgTextureLvl3;
-                        SpawnLevelEnemies(enemies, currentLevel,&activeEnemyCount,GROUND_LEVEL,screenWidth);
+                        SpawnLevelEnemies(enemies, currentLevel,&activeEnemyCount,GROUND_LEVEL,screenWidth,difficultyEnemyHealth[selectedDifficulty]);
                     }
                 }
             }
@@ -805,14 +818,15 @@ int main()
                 isHurt=false;
                 hurtTimer=0.0f;
                 deathAnimStarted=false;
-                scoreSaved=false;               
+                scoreSaved=false;
+                score=0;              
                 playerName[0]='\0';     
                 nameLetterCount=0;  
                 playerAnimState=PLAYER_ANIM_IDLE;
                 playerFrame=0;
                 playerFrameTimer=0.0f;
-                SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth);
-                currentState=STATE_GAMEPLAY;
+                SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth,difficultyEnemyHealth[selectedDifficulty]);
+                currentState=STATE_MENU;
             }
         }
 
@@ -951,17 +965,17 @@ int main()
             DrawTextEx(myfont,"Attack 1: J or LEFT MOUSE BUTTON", (Vector2){200, 325}, 22,2, RAYWHITE);
             DrawTextEx(myfont,"Attack 2: RIGHT MOUSE BUTTON",(Vector2) {200, 360}, 22,2, RAYWHITE);
             DrawTextEx(myfont,"Defeat all enemies to clear each level!", (Vector2){200, 410}, 22,2, YELLOW);
-            DrawTextEx(myfont,"Press ESC to return to menu", (Vector2){screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
+            DrawTextEx(myfont,"Press ESC to return to menu", (Vector2){screenWidth/2-170, screenHeight-60}, 20,2, GRAY);
         }
         else if(currentState==STATE_CREDITS)
         {
             DrawTexture(menubg,0,0,WHITE);
             DrawTextEx(myfont,"Credits",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Credits",60,2).x/2,100},60,2,(Color){48,120,148,255});
-            DrawTextEx(myfont,"Game design & programming:DANIEL & FATIN", (Vector2){250, 230}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Music: Hollow Knight OST - Sealed Vessel", (Vector2){250, 265}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Sprites: Craftpix & Itch.io and other open sources",(Vector2) {250, 300}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){125,18,44,255});
-            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
+            DrawTextEx(myfont,"Game design & programming:DANIEL & FATIN", (Vector2){250, 230}, 30,2, (Color){230,157,153,255});
+            DrawTextEx(myfont,"Music: Hollow Knight OST - Sealed Vessel", (Vector2){250, 265}, 30,2, (Color){230,157,153,255});
+            DrawTextEx(myfont,"Sprites: Craftpix & Itch.io and other open sources",(Vector2) {250, 300}, 30,2, (Color){230,157,153,255});
+            DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){230,157,153,255});
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-170, screenHeight-60}, 20,2, GRAY);
         }
         else if(currentState==STATE_DIFFICULTY)
         {
@@ -994,7 +1008,7 @@ int main()
                         (Vector2){screenWidth/2-180,230+i*45},28,2,RAYWHITE);
                 }
             }
-            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2){screenWidth/2-220,screenHeight-60},20,2,GRAY);
+            DrawTextEx(myfont,"Press ESC to return to menu",(Vector2){screenWidth/2-170,screenHeight-60},20,2,GRAY);
         }
         else if(currentState==STATE_NAME_ENTRY)
         {
@@ -1004,20 +1018,20 @@ int main()
             DrawRectangleRec(nameBox,(Color){30,30,40,255});
             DrawRectangleLinesEx(nameBox,2,SKYBLUE);
             DrawTextEx(myfont,playerName,(Vector2){nameBox.x+10,nameBox.y+8},30,2,WHITE);
-            if(((int)(GetTime()*2)%2)==0)   // blinking cursor
+            if(((int)(GetTime()*2)%2)==0)  
             {
                 float cursorX=nameBox.x+10+MeasureTextEx(myfont,playerName,30,2).x+4;
                 DrawTextEx(myfont,"|",(Vector2){cursorX,nameBox.y+8},30,2,WHITE);
             }
-            DrawTextEx(myfont,"Press ENTER to continue",(Vector2){screenWidth/2-180,340},20,2,GRAY);
-            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-180,screenHeight-60},20,2,GRAY);
+            DrawTextEx(myfont,"Press ENTER to continue",(Vector2){screenWidth/2-130,340},20,2,GRAY);
+            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-130,screenHeight-60},20,2,GRAY);
         }
         else if(currentState==STATE_VICTORY)
         {
             const char*winText="VICTORY! YOU CLEARED ALL 3 LEVELS!";
             int winWidth=MeasureText(winText,32);
             DrawTextEx(myfont,winText,(Vector2){(screenWidth-winWidth)/2,220},32,2,GOLD);
-            const char*subText="Press ENTER or R to Play Again";
+            const char*subText="Press ENTER or R to go back";
             int subWidth=MeasureText(subText,20);
             DrawTextEx(myfont,subText,(Vector2){(screenWidth-subWidth)/2,300},20,2,RAYWHITE);
             const char*scoreText=TextFormat("Final Score: %d",score);
@@ -1051,11 +1065,12 @@ int main()
     return 0;
 }
 
-void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW)
+void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groundLevel, int screenW,int enemyHealth)
 {
     *activeCount=6+(level-1)*2;
     if(*activeCount>ABSOLUTE_MAX_ENEMIES)*activeCount=ABSOLUTE_MAX_ENEMIES;
     float speedBoost=(level-1)*30.0f;
+    int scaledHealth=enemyHealth+(level-1);
     float zoneMinX[3]={ 300.0f, 600.0f, 900.0f }; //enemy er norar jayga
     float zoneMaxX[3]={ 500.0f, 800.0f, 1150.0f };
     for(int i=0; i<*activeCount; i++)
@@ -1076,7 +1091,8 @@ void SpawnLevelEnemies(Enemy enemies[], int level, int *activeCount, float groun
             maxX,
             ENEMY_ANIM_RUN,
             0,
-            0.0f
+            0.0f,
+            scaledHealth
         };
     }
     (void)screenW; //currently unused, kept for future spawn logic that scales with screen width
