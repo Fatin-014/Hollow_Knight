@@ -19,7 +19,7 @@
 #define PLAYER_FRAME_TIME (1.0f/12.0f) //how fast the knight's animation strips advance
 #define DASH_SPEED 700.0f
 #define DASH_DURATION 0.2f   //how long the dash's forward slide lasts
-#define DASH_COOLDOWN 0.5f   //time before you can dash again
+#define DASH_COOLDOWN 3.0f   //time before you can dash again
 // attack fixing
 #define PLAYER_COLLISION_WIDTH 40.0f
 #define PLAYER_COLLISION_HEIGHT 80.0f
@@ -38,14 +38,24 @@
 #define ATTACK2_DURATION 0.6f
 
 
+
 typedef enum GameState
 {
     STATE_MENU,
     STATE_GAMEPLAY,
     STATE_VICTORY,
     STATE_INSTRUCTIONS,
-    STATE_CREDITS
+    STATE_CREDITS,
+    STATE_DIFFICULTY
 } GameState;
+typedef enum Difficulty
+{
+    DIFF_EASY,
+    DIFF_MEDIUM,
+    DIFF_HARD
+}Difficulty;
+
+float difficultyScoreMultiplier[3]={1.0f, 1.5f, 2.0f};
 
 typedef enum EnemyAnimState
 {
@@ -128,6 +138,7 @@ int main()
 
     int playerHealth=5;
     int score=0;
+    Difficulty selectedDifficulty=DIFF_MEDIUM;
     const int maxPlayerHealth=5;
     bool isInvincible=false;
     float invincibilityTimer=0.0f;
@@ -205,12 +216,21 @@ int main()
     char* exit="EXIT GAME";
     char* instruction="Instructions";
     char* credits="Credits";
+    char* easy="EASY";
+    char* medium="MEDIUM";
+    char* hard="HARD";
 
     Vector2 sizeStart=MeasureTextEx(myfont,start,40,2);
     Vector2 sizeExit=MeasureTextEx(myfont,exit,40,2);
     Vector2 sizeinstructions=MeasureTextEx(myfont,instruction,40,2);
     Vector2 sizecredits=MeasureTextEx(myfont,credits,40,2);
-
+    Vector2 sizeEasy=MeasureTextEx(myfont,easy,40,2);
+    Vector2 sizeMedium=MeasureTextEx(myfont,medium,40,2);
+    Vector2 sizeHard=MeasureTextEx(myfont,hard,40,2);
+    
+    Rectangle easybtn={screenWidth/2-sizeEasy.x/2,250,sizeEasy.x,sizeEasy.y};
+    Rectangle mediumbtn={screenWidth/2-sizeMedium.x/2,320,sizeMedium.x,sizeMedium.y};
+    Rectangle hardbtn={screenWidth/2-sizeHard.x/2,390,sizeHard.x,sizeHard.y};
     Rectangle startbtn={screenWidth/2-sizeStart.x/2,250,sizeStart.x,sizeStart.y};
     Rectangle exitbtn={screenWidth/2-sizeExit.x/2,300,sizeExit.x,sizeExit.y};
     Rectangle instrbtn={screenWidth/2-sizeinstructions.x/2,350,sizeinstructions.x,sizeinstructions.y};
@@ -232,8 +252,7 @@ int main()
             if(CheckCollisionPointRec(mousepos,startbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 PlaySound(clicksound);
-                PlayMusicStream(gamemusic);
-                currentState=STATE_GAMEPLAY;
+                currentState=STATE_DIFFICULTY;
             }
             if(CheckCollisionPointRec(mousepos,exitbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
@@ -266,6 +285,34 @@ int main()
         }
         else if(currentState==STATE_CREDITS)
         {
+            if(IsKeyPressed(KEY_ESCAPE))
+            {
+                currentState=STATE_MENU;
+            }
+        }
+        else if(currentState==STATE_DIFFICULTY)
+        {
+            if(CheckCollisionPointRec(mousepos,easybtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySound(clicksound);
+                selectedDifficulty=DIFF_EASY;
+                PlayMusicStream(gamemusic);
+                currentState=STATE_GAMEPLAY;
+            }
+            if(CheckCollisionPointRec(mousepos,mediumbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySound(clicksound);
+                selectedDifficulty=DIFF_MEDIUM;
+                PlayMusicStream(gamemusic);
+                currentState=STATE_GAMEPLAY;
+            }
+            if(CheckCollisionPointRec(mousepos,hardbtn)&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySound(clicksound);
+                selectedDifficulty=DIFF_HARD;
+                PlayMusicStream(gamemusic);
+                currentState=STATE_GAMEPLAY;
+            }
             if(IsKeyPressed(KEY_ESCAPE))
             {
                 currentState=STATE_MENU;
@@ -445,7 +492,7 @@ int main()
                                 enemies[i].animState=ENEMY_ANIM_HIT;
                                 enemies[i].currentFrame=0;
                                 enemies[i].frameTimer=0.0f;
-                                score+=10;
+                                score+=(int)(10*difficultyScoreMultiplier[selectedDifficulty]);
                             }
                         }
                     }
@@ -617,12 +664,12 @@ int main()
                 {
                     if(currentLevel>=3)
                     {
-                        score+=100;
+                        score+=(int)(100*difficultyScoreMultiplier[selectedDifficulty]);
                         currentState=STATE_VICTORY;
                     }
                     else
                     {
-                        score+=50;
+                        score+=(int)(50*difficultyScoreMultiplier[selectedDifficulty]);
                         currentLevel++;
                         player.rec.x=50.0f;
                         if(currentLevel==2&&bgTextureLvl2.id!=0) currentBgTexture=bgTextureLvl2;
@@ -757,24 +804,27 @@ int main()
                         };
                     }
 
-            DrawText(TextFormat("LEVEL %d/3",currentLevel),10,10,22,YELLOW);
+            DrawTextEx(myfont,TextFormat("LEVEL %d/3",currentLevel),(Vector2){10,10},22,2,YELLOW);
+            DrawTextEx(myfont,TextFormat("SCORE: %d",score),(Vector2){10,90},22,2,YELLOW);
             for(int i=0;i<maxPlayerHealth;i++)
             {
                 Color heartColor=(i<playerHealth)?RED:DARKGRAY;
                 DrawRectangle(160+(i*25),10,20,20,heartColor);
                 DrawRectangleLines(160+(i*25),10,20,20,WHITE);
             }
+            const char* diffLabel=(selectedDifficulty==DIFF_EASY)?"EASY":(selectedDifficulty==DIFF_HARD)?"HARD":"MEDIUM";
+            DrawTextEx(myfont,TextFormat("Difficulty: %s",diffLabel),(Vector2){10,65},18,2,ORANGE);
             if(dashCooldownTimer>0.0f)
             {
-                DrawText(TextFormat("Dash: %.1fs", dashCooldownTimer), 10, 40, 18, SKYBLUE);
+                DrawTextEx(myfont,TextFormat("Dash: %.1fs", dashCooldownTimer),(Vector2){ 10, 40}, 18,2, SKYBLUE);
             }
             else
             {
-                DrawText("Dash: ready", 10, 40, 18, SKYBLUE);
+                DrawTextEx(myfont,"Dash: ready",(Vector2){10, 40}, 18,2, SKYBLUE);
             }
             if(playerHealth<=0)
             {
-                DrawText("GAME OVER!!Press R to Restart",screenWidth/2-200,screenHeight/2,28,RED);
+                DrawTextEx(myfont,"GAME OVER!!Press R to Restart",(Vector2){screenWidth/2-200,screenHeight/2},28,2,RED);
             }
         }
         else if(currentState==STATE_INSTRUCTIONS)
@@ -799,6 +849,18 @@ int main()
             DrawTextEx(myfont,"Made with raylib", (Vector2){250, 335}, 30,2, (Color){125,18,44,255});
             DrawTextEx(myfont,"Press ESC to return to menu",(Vector2) {screenWidth/2-220, screenHeight-60}, 20,2, GRAY);
         }
+        else if(currentState==STATE_DIFFICULTY)
+        {
+            DrawTexture(menubg,0,0,WHITE);
+            DrawTextEx(myfont,"Choose Difficulty",(Vector2){screenWidth/2-MeasureTextEx(myfont,"Choose Difficulty",60,2).x/2,120},60,2,(Color){48,120,148,255});
+            Color colEasy=CheckCollisionPointRec(mousepos,easybtn)?GREEN:RED;
+            DrawTextEx(myfont,easy,(Vector2){easybtn.x,easybtn.y},40,2,colEasy);
+            Color colMedium=CheckCollisionPointRec(mousepos,mediumbtn)?GREEN:RED;
+            DrawTextEx(myfont,medium,(Vector2){mediumbtn.x,mediumbtn.y},40,2,colMedium);
+            Color colHard=CheckCollisionPointRec(mousepos,hardbtn)?GREEN:RED;
+            DrawTextEx(myfont,hard,(Vector2){hardbtn.x,hardbtn.y},40,2,colHard);
+            DrawTextEx(myfont,"Press ESC to go back",(Vector2){screenWidth/2-130,screenHeight-60},20,2,GRAY);
+        }
         else if(currentState==STATE_VICTORY)
         {
             const char*winText="VICTORY! YOU CLEARED ALL 3 LEVELS!";
@@ -807,6 +869,9 @@ int main()
             const char*subText="Press ENTER or R to Play Again";
             int subWidth=MeasureText(subText,20);
             DrawText(subText,(screenWidth-subWidth)/2,300,20,RAYWHITE);
+            const char*scoreText=TextFormat("Final Score: %d",score);
+            int scoreWidth=MeasureText(scoreText,24);
+            DrawTextEx(myfont,scoreText,(Vector2){(screenWidth-scoreWidth)/2,340},24,2,YELLOW);
         }
         EndDrawing();
     }
