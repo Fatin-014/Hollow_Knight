@@ -17,3 +17,4 @@ fatin,240
 fatin,0
 fatin,120
 fatin,620
+fatin,0
