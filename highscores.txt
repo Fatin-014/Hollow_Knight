@@ -24,3 +24,5 @@ fatin,570
 fatin,570
 fatin,370
 fatin,240
+da,300
+d,240
