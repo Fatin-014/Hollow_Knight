@@ -1,13 +1,10 @@
 #include "raylib.h"
 #include "raymath.h"
-#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdbool.h>
-
 #define LEVEL_INTRO_DURATION 2.5f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 1
+#define ABSOLUTE_MAX_ENEMIES 12
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
@@ -54,7 +51,7 @@
 #define BOSS_ATTACK_RANGE_BASE 75.0f       //detection margin: how far beyond EACH side of the boss's body the player can be and still get noticed (+ difficulty bonus)
 #define BOSS_WINDUP_SPEED_MULT 2.0f        //frames before BOSS_HIT_START_FRAME (the windup) play this many times faster than the rest of the swing
 #define BOSS_SPAWN_COOLDOWN 1.0f           //short grace period after the boss room loads before its first swing
-#define BOSS_ATTACK_COOLDOWN_BASE 1.0f     //time after a swing before the boss can attack again, before difficulty speed-up
+#define BOSS_ATTACK_COOLDOWN_BASE 2.0f     //time after a swing before the boss can attack again, before difficulty speed-up
 #define BOSS_HIT_START_FRAME 6             //frame range of demon_cleave that can actually hit the player
 #define BOSS_HIT_END_FRAME 9
 #define BOSS_COLLISION_WIDTH 70.0f     //hurtbox: where your attacks have to land (mirrored when the boss faces left)
@@ -1053,11 +1050,6 @@ int main()
                 }
                 if(curPlayerFrameCount<1) curPlayerFrameCount=1;
 
-                //fix: attacks advance at their own rate (attackFrameTime) so the full strip plays out
-                //within ATTACK1_DURATION/ATTACK2_DURATION; everything else uses the normal PLAYER_FRAME_TIME.
-                //this is the actual fix for the "older" attack2 animation issue you flagged - previously
-                //every animation state advanced at the same fixed PLAYER_FRAME_TIME regardless of how short
-                //ATTACK1_DURATION/ATTACK2_DURATION were, so both attacks got visually cut off early.
                 bool isAttackAnim=(playerAnimState==PLAYER_ANIM_ATTACK1||playerAnimState==PLAYER_ANIM_ATTACK2);
                 float curFrameTime=isAttackAnim?attackFrameTime:PLAYER_FRAME_TIME;
 
