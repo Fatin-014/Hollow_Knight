@@ -5,7 +5,7 @@ fatin,160
 fatin,240
 fatin,260
 fatin,440
-daniel,880
+fatin,880
 fatin,280
 fatin,440
 fatin,860
@@ -44,3 +44,6 @@ Rakin,160
 Rakin,570
 fatin,240
 fatin,560
+jeba,150
+fatin,570
+fatin,570

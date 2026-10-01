@@ -4,7 +4,7 @@
 #include <stdio.h>
 #define LEVEL_INTRO_DURATION 2.5f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 12
+#define ABSOLUTE_MAX_ENEMIES 0
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
@@ -51,7 +51,7 @@
 #define BOSS_ATTACK_RANGE_BASE 75.0f       //detection margin: how far beyond EACH side of the boss's body the player can be and still get noticed (+ difficulty bonus)
 #define BOSS_WINDUP_SPEED_MULT 2.0f        //frames before BOSS_HIT_START_FRAME (the windup) play this many times faster than the rest of the swing
 #define BOSS_SPAWN_COOLDOWN 1.0f           //short grace period after the boss room loads before its first swing
-#define BOSS_ATTACK_COOLDOWN_BASE 2.0f     //time after a swing before the boss can attack again, before difficulty speed-up
+#define BOSS_ATTACK_COOLDOWN_BASE 1.0f     //time after a swing before the boss can attack again, before difficulty speed-up
 #define BOSS_HIT_START_FRAME 6             //frame range of demon_cleave that can actually hit the player
 #define BOSS_HIT_END_FRAME 9
 #define BOSS_COLLISION_WIDTH 70.0f     //hurtbox: where your attacks have to land (mirrored when the boss faces left)
@@ -1152,7 +1152,7 @@ int main()
                 boss.frameTimer=0.0f;
                 boss.attackCooldownTimer=0.0f;
                 SpawnLevelEnemies(enemies, currentLevel, &activeEnemyCount, GROUND_LEVEL, screenWidth, selectedDifficulty);
-                currentState=STATE_GAMEPLAY;
+                currentState=STATE_MENU;
             }
         }
 
@@ -1375,7 +1375,7 @@ int main()
                     }
                 }
             }
-            DrawText(showHitboxes?"Hitboxes: ON (T)":"Hitboxes: OFF (T)", 10, 590, 14, showHitboxes?LIME:GRAY);
+            //DrawText(showHitboxes?"Hitboxes: ON (T)":"Hitboxes: OFF (T)", 10, 590, 14, showHitboxes?LIME:GRAY);
 
             DrawTextEx(myfont,TextFormat("LEVEL %d/%d",currentLevel,MAX_LEVEL),(Vector2){10,10},22,2,YELLOW);
             DrawTextEx(myfont,TextFormat("SCORE: %d",score),(Vector2){10,90},22,2,YELLOW);
@@ -1401,9 +1401,9 @@ int main()
             }
 
             //--- TEMP DEBUG: remove once the boss is confirmed visible - id==0 means that file failed to load ---
-            DrawText(TextFormat("boss idle[0]=%d cleave[0]=%d hit[0]=%d death[0]=%d",
-                bossAnim.idle.frames[0].id, bossAnim.cleave.frames[0].id,
-                bossAnim.hit.frames[0].id, bossAnim.death.frames[0].id), 10, 570, 14, LIME);
+            //DrawText(TextFormat("boss idle[0]=%d cleave[0]=%d hit[0]=%d death[0]=%d",
+                //bossAnim.idle.frames[0].id, bossAnim.cleave.frames[0].id,
+                //bossAnim.hit.frames[0].id, bossAnim.death.frames[0].id), 10, 570, 14, LIME);
             //--- END TEMP DEBUG ---
             //==================================================
 // LEVEL INTRO ANIMATION
@@ -1593,10 +1593,10 @@ if(showLevelIntro)
         {
             const char*winText="VICTORY! THE DEMON HAS FALLEN!";
             int winWidth=MeasureText(winText,32);
-            DrawText(winText,(screenWidth-winWidth)/2,220,32,GOLD);
+            DrawTextEx(myfont,winText,(Vector2){(screenWidth-winWidth)/2,220},32,2,GOLD);
             const char*subText="Press ENTER or R to Play Again";
             int subWidth=MeasureText(subText,20);
-            DrawText(subText,(screenWidth-subWidth)/2,300,20,RAYWHITE);
+            DrawTextEx(myfont,subText,(Vector2){(screenWidth-subWidth)/2,300},20,2,RAYWHITE);
             const char*scoreText=TextFormat("Final Score: %d",score);
             int scoreWidth=MeasureText(scoreText,24);
             DrawTextEx(myfont,scoreText,(Vector2){(screenWidth-scoreWidth)/2,340},24,2,YELLOW);
