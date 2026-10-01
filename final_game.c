@@ -4,7 +4,7 @@
 #include <stdio.h>
 #define LEVEL_INTRO_DURATION 2.5f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 0
+#define ABSOLUTE_MAX_ENEMIES 12
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
