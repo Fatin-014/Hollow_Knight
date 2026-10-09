@@ -4,7 +4,7 @@
 #include <stdio.h>
 #define LEVEL_INTRO_DURATION 2.5f
 #define MAX_NAME_LEN 16
-#define ABSOLUTE_MAX_ENEMIES 12
+#define ABSOLUTE_MAX_ENEMIES 0
 #define screenWidth 1280
 #define screenHeight 600
 #define GROUND_LEVEL 560.0f
@@ -51,7 +51,7 @@
 #define BOSS_ATTACK_RANGE_BASE 75.0f       //detection margin: how far beyond EACH side of the boss's body the player can be and still get noticed (+ difficulty bonus)
 #define BOSS_WINDUP_SPEED_MULT 2.0f        //frames before BOSS_HIT_START_FRAME (the windup) play this many times faster than the rest of the swing
 #define BOSS_SPAWN_COOLDOWN 1.0f           //short grace period after the boss room loads before its first swing
-#define BOSS_ATTACK_COOLDOWN_BASE 1.0f     //time after a swing before the boss can attack again, before difficulty speed-up
+#define BOSS_ATTACK_COOLDOWN_BASE 2.0f     //time after a swing before the boss can attack again, before difficulty speed-up
 #define BOSS_HIT_START_FRAME 6             //frame range of demon_cleave that can actually hit the player
 #define BOSS_HIT_END_FRAME 9
 #define BOSS_COLLISION_WIDTH 70.0f     //hurtbox: where your attacks have to land (mirrored when the boss faces left)
@@ -903,7 +903,6 @@ int main()
                 //--- boss update (only relevant in the boss room) ---
                 if(currentLevel==BOSS_LEVEL&&boss.active)
                 {
-                    float curBossAttackRange=BOSS_ATTACK_RANGE_BASE+bossRangeBonus[selectedDifficulty];
                     float curBossAttackRangeBox=BOSS_ATTACK_RANGE_BOX_BASE+bossRangeBonus[selectedDifficulty];
                     float curBossFrameTime=BOSS_FRAME_TIME/bossAttackSpeedMultiplier[selectedDifficulty]; //faster swing on higher difficulty
                     float curBossCooldown=BOSS_ATTACK_COOLDOWN_BASE/bossAttackSpeedMultiplier[selectedDifficulty]; //attacks more often too
@@ -924,8 +923,6 @@ int main()
                     }
 
                     //detection zone: the boss's body plus curBossAttackRange pixels on BOTH sides
-                    bool playerDetected=(playerBodyNow.x<bossBodyNow.x+bossBodyNow.width+curBossAttackRange)
-                                      &&(playerBodyNow.x+playerBodyNow.width>bossBodyNow.x-curBossAttackRange);
 
                     if(boss.animState==BOSS_ANIM_DEATH)
                     {
@@ -1000,7 +997,7 @@ int main()
                     else
                     {
                         if(boss.attackCooldownTimer>0.0f) boss.attackCooldownTimer-=deltaTime;
-                        if(boss.attackCooldownTimer<=0.0f&&playerDetected)
+                        if(boss.attackCooldownTimer<=0.0f)
                         {
                             boss.animState=BOSS_ANIM_CLEAVE;
                             boss.currentFrame=0;

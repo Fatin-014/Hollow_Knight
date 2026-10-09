@@ -47,3 +47,8 @@ fatin,560
 jeba,150
 fatin,570
 fatin,570
+fatin,440
+fatin,1100
+fatin,500
+fatin,710
+fatin,1140
